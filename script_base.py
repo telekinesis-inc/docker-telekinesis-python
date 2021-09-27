@@ -1,6 +1,7 @@
 import asyncio
 import telekinesis as tk
 import os
+import json
 {{IMPORTS}}
 
 class Dict(dict):
@@ -15,7 +16,7 @@ class Dict(dict):
 
 async def executor(code, namespace={}):
     prefix = 'async def _wrapper(_new):\n'
-    content = ('\n'+code).replace('\n', '\n  ')
+    content = ('\n'+code).replace('\n', '\n    ')
     suffix = """
     for _var in dir():
         if _var[0] != '_':
@@ -29,11 +30,14 @@ async def main():
     print('starting')
     e = asyncio.Event()
 
-    b = await tk.Broker().serve('0.0.0.0')
-    r, t = await tk.create_entrypoint(lambda: {'executor': executor, 'stop': lambda: e.set()}, is_public=False)
+    with open('../session_key.pem', 'w') as file:
+        file.write(os.environ['PRIVATEKEY'])
 
-    r = await t._delegate(os.environ['PARENT'])
-    b.entrypoint = r
+    entrypoint = await tk.Entrypoint('ws://127.0.0.1:8777', '../session_key.pem')
+    route = tk.Route(**json.loads(os.environ['ROUTE']))
+
+    await tk.Telekinesis(route, entrypoint._session)({'executor': executor, 'stop': lambda: e.set()})
+
     print('running')
 
     await e.wait()
