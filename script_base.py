@@ -14,7 +14,8 @@ class Dict(dict):
     def clear(*args):
         raise PermissionError
 
-async def executor(code, namespace={}):
+async def executor(code, namespace=None):
+    namespace = namespace or {}
     prefix = 'async def _wrapper(_new):\n'
     content = ('\n'+code).replace('\n', '\n    ')
     suffix = """
