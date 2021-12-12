@@ -2,3 +2,5 @@
 __pycache__
 Dockerfile
 script.py
+
+node_modules/
