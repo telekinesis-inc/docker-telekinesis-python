@@ -1,10 +1,12 @@
 FROM node:17-buster-slim
 
-WORKDIR /usr/src/app/data
+WORKDIR /usr/src/app
 
 RUN npm install telekinesis-js ws
 {{DEPENDENCIES}}
 
-COPY script.js ..
+COPY script.js .
+
+WORKDIR /usr/src/app/data
 
 ENTRYPOINT ["node", "../script.js"]

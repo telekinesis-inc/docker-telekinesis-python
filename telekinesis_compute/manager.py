@@ -78,19 +78,18 @@ class AppManager:
         environment=[
             "URL='"+self.url+"'",
             "ROUTE='"+json.dumps(route.to_dict())+"'",
-            "PRIVATEKEY='"+client_session.session_key._private_serial().decode().replace('\n','\\')+"'"]
+            "PRIVATEKEY='"+client_session.session_key._private_serial().decode().strip('\n').replace('\n','\\')+"'"]
         
         cmd = f"docker run -e {' -e '.join(environment)} -d --rm --network=host {tag}"
         
-        # print(cmd)
         process = await asyncio.create_subprocess_shell(
             cmd,
             stdout=asyncio.subprocess.PIPE
         )
-        
+
+        container_id = (await process.stdout.read()).decode().replace('\n','')
 
         d = await awaiter()
-        container_id = (await process.stdout.read()).decode().replace('\n','')
         # container = self.client.containers.get(container_id)
         
         d.update({'container_id': container_id})

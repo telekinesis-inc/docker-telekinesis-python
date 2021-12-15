@@ -1,0 +1,7 @@
+README.md
+setup.py
+telekinesis_compute.egg-info/PKG-INFO
+telekinesis_compute.egg-info/SOURCES.txt
+telekinesis_compute.egg-info/dependency_links.txt
+telekinesis_compute.egg-info/requires.txt
+telekinesis_compute.egg-info/top_level.txt

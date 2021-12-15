@@ -4,7 +4,7 @@ const vm = require('vm');
 const main = () => new Promise(resolve => {
     console.log('starting')
 
-    async function executor(code, namespace, injectContext=False) {
+    async function executor(code, namespace, injectContext=false) {
         namespace = namespace || {};
         if (injectContext) {
             namespace['_context'] = {'stop': resolve}
@@ -15,10 +15,11 @@ const main = () => new Promise(resolve => {
         return context;
     }
 
-    let entrypoint = await new tk.Entrypoint(process.env.URL, JSON.parse(process.env.PRIVATEKEY.replace('\\', '\n')));
     let route = tk.Route.fromObject(JSON.parse(process.env.ROUTE))
 
-    await new tk.Telekinesis(route, entrypoint._session)({executor: executor, stop: resolve})
+    let entrypoint = new tk.Entrypoint(process.env.URL, process.env.PRIVATEKEY.replaceAll('\\', '\n'));
+
+    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)({executor: executor, stop: resolve}))
 
     console.log('running');
 });
