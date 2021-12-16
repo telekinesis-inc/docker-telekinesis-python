@@ -107,10 +107,11 @@ class AppManager:
         return self.client.images.prune()
     
     async def get_instance(self, name, language='python', *imports, upgrade=False):
-        if not self.ready.get('-'.join(imports)):
+        tag = '-'.join(['tk', language, *imports])
+        if not self.ready.get(tag):
             print('awaiting provisioning')
             await self.provision(1, language, *imports, upgade=upgrade)
-        d = self.ready['-'.join([language, *imports])].pop()
+        d = self.ready[tag].pop()
         async def delayed_provisioning():
             await asyncio.sleep(1)
             await self.provision(1, language, *imports, upgrade=upgrade)
