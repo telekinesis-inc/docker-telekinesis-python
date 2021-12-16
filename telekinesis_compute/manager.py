@@ -62,8 +62,6 @@ class AppManager:
     async def create_container(self, language='python', *dependencies):
         tag = '-'.join(['tk', language, *dependencies])
 
-        if not self.client.images.list(name=tag):
-            await self.build_image(language, *dependencies)
 
         def create_callbackable():
             e = asyncio.Event()
@@ -127,8 +125,9 @@ class AppManager:
         if not tag in self.ready:
             self.ready[tag] = []
 
-        if upgade:
+        if upgade or not self.client.images.list(name=tag):
             await self.build_image(language, *imports)
+
         self.ready[tag].extend(
             await asyncio.gather(*[self.create_container(language, *imports) for _ in range(number)])
         )
