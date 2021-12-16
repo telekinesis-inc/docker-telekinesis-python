@@ -40,7 +40,8 @@ class AppManager:
         self._session = session
         self.path = path
 
-    async def create_container(self, language='python', *dependencies):
+    async def build_image(self, language, *dependencies):
+        tag = '-'.join(['tk', language, *dependencies])
         if language == 'python':
             prepare_python_files(self.path, *dependencies)
         elif language == 'js':
@@ -48,7 +49,6 @@ class AppManager:
         else:
             raise NotImplementedError("Only implemented languages are 'python' and 'js'")
 
-        tag = '-'.join(['tkpy' if language == 'python' else 'tkjs', *dependencies])
         
         cmd = f'docker build -t {tag} {self.path}'
         
@@ -58,6 +58,12 @@ class AppManager:
         )
         await build.stdout.read()
         # await self.client.images.build(path_dockerfile='./docker_telekinesis_python/', tag=tag)
+
+    async def create_container(self, language='python', *dependencies):
+        tag = '-'.join(['tk', language, *dependencies])
+
+        if not self.client.images.list(name=tag):
+            self.build_image(language, *dependencies)
 
         def create_callbackable():
             e = asyncio.Event()
@@ -80,7 +86,7 @@ class AppManager:
             "ROUTE='"+json.dumps(route.to_dict())+"'",
             "PRIVATEKEY='"+client_session.session_key._private_serial().decode().strip('\n').replace('\n','\\')+"'"]
         
-        cmd = f"docker run -e {' -e '.join(environment)} -d --rm --network=host {tag}"
+        cmd = f"docker run -e {' -e '.join(environment)} -d --rm --network=host -l telekinesis-compute {tag}"
         
         process = await asyncio.create_subprocess_shell(
             cmd,
@@ -97,31 +103,33 @@ class AppManager:
         return d
 
     async def clear_containers(self):
-        [c.stop(timeout=0) for c in self.client.containers.list(all=True)]
-        [c.remove() for c in self.client.containers.list(all=True)]
+        [c.stop(timeout=0) for c in self.client.containers.list(all=True, filters={'label': 'telekinesis-compute'})]
+        [c.remove() for c in self.client.containers.list(all=True, filters={'label': 'telekinesis-compute'})]
 
         return self.client.images.prune()
     
-    async def get_instance(self, name, language='python', *imports):
+    async def get_instance(self, name, language='python', *imports, upgrade=False):
         if not self.ready.get('-'.join(imports)):
             print('awaiting provisioning')
-            await self.provision(1, language, *imports)
-        d = self.ready['-'.join(imports)].pop()
+            await self.provision(1, language, *imports, upgade=upgrade)
+        d = self.ready['-'.join([language, *imports])].pop()
         async def delayed_provisioning():
             await asyncio.sleep(1)
-            await self.provision(1, language, *imports)
+            await self.provision(1, language, *imports, upgrade=upgrade)
             
         asyncio.create_task(delayed_provisioning())
         self.running[name] = d
         return d
 
-    async def provision(self, number, language='python', *imports):
+    async def provision(self, number, language='python', *imports, upgade=False):
         print('provisioning', number)
-        imports_string = '-'.join([language, *imports])
-        if not imports_string in self.ready:
-            self.ready[imports_string] = []
+        tag = '-'.join(['tk', language, *imports])
+        if not tag in self.ready:
+            self.ready[tag] = []
 
-        self.ready[imports_string].extend(
+        if upgade:
+            await self.build_image(language, *imports)
+        self.ready[tag].extend(
             await asyncio.gather(*[self.create_container(language, *imports) for _ in range(number)])
         )
     
