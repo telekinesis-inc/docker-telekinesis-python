@@ -63,7 +63,7 @@ class AppManager:
         tag = '-'.join(['tk', language, *dependencies])
 
         if not self.client.images.list(name=tag):
-            self.build_image(language, *dependencies)
+            await self.build_image(language, *dependencies)
 
         def create_callbackable():
             e = asyncio.Event()
