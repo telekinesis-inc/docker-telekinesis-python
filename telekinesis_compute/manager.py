@@ -1,5 +1,6 @@
 import os
 import importlib
+import time
 import json
 import asyncio
 import telekinesis as tk
@@ -39,6 +40,7 @@ class AppManager:
         self.url = url or list(session.connections)[0].url
         self._session = session
         self.path = path
+        self.tasks = {}
 
     async def build_image(self, language, *dependencies):
         tag = '-'.join(['tk', language, *dependencies])
@@ -110,23 +112,25 @@ class AppManager:
         tag = '-'.join(['tk', language, *imports])
         if not self.ready.get(tag):
             print('awaiting provisioning')
-            await self.provision(1, language, *imports, upgade=upgrade)
+            await self.provision(1, language, *imports, upgrade=upgrade)
         d = self.ready[tag].pop()
-        async def delayed_provisioning():
+        async def delayed_provisioning(t):
             await asyncio.sleep(1)
             await self.provision(1, language, *imports, upgrade=upgrade)
+            self.tasks.pop(t)
             
-        asyncio.create_task(delayed_provisioning())
+        t = time.time()
+        self.tasks[t] = asyncio.create_task(delayed_provisioning(t))
         self.running[name] = d
         return d
 
-    async def provision(self, number, language='python', *imports, upgade=False):
+    async def provision(self, number, language='python', *imports, upgrade=False):
         print('provisioning', number)
         tag = '-'.join(['tk', language, *imports])
         if not tag in self.ready:
             self.ready[tag] = []
 
-        if upgade or not self.client.images.list(name=tag):
+        if upgrade or not self.client.images.list(name=tag):
             await self.build_image(language, *imports)
 
         self.ready[tag].extend(
