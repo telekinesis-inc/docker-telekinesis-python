@@ -71,6 +71,7 @@ class AppManager:
 
             async def awaiter():
                 await e.wait()
+                print('called awaiter')
                 return data['data']
 
             return (awaiter, lambda x: data.update({'data': x}) or e.set())

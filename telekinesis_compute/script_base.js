@@ -10,9 +10,8 @@ const main = () => new Promise(resolve => {
             namespace['_context'] = {'stop': resolve}
         }
         let context = vm.createContext(namespace)
-        content = '(async () => {\n' +code+"\n})();";
-        vm.runInContext(content, context)
-        return context;
+        content = '(async () => {\n' +code+"\n})()";
+        return new Promise((r, rej) => vm.runInContext(content, context).then(() => {r(context)}).catch(rej));
     }
 
     let route = tk.Route.fromObject(JSON.parse(process.env.ROUTE))
@@ -23,5 +22,4 @@ const main = () => new Promise(resolve => {
 
     console.log('running');
 });
-
-main().then(console.log);
+main().then(console.log)

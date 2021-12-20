@@ -27,7 +27,7 @@ async def main():
     with open('../session_key.pem', 'w') as file:
         file.write(os.environ['PRIVATEKEY'].replace('\\', '\n'))
 
-    entrypoint = await tk.Entrypoint('ws://127.0.0.1:8777', '../session_key.pem')
+    entrypoint = await tk.Entrypoint(os.environ['URL'], '../session_key.pem')
     route = tk.Route(**json.loads(os.environ['ROUTE']))
 
     await tk.Telekinesis(route, entrypoint._session)({'executor': executor, 'stop': lambda: e.set()})
