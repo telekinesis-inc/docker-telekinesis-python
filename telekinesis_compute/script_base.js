@@ -1,6 +1,13 @@
 const tk = require('telekinesis-js');
 const vm = require('vm');
 
+
+async function executor(code, namespace, injectContext=false) {
+    content = '(async () => {\n' +code+"\n})()";
+    return await eval(content);
+}
+new tk.Entrypoint()(executor).then(console.log);
+
 const main = () => new Promise(resolve => {
     console.log('starting')
 
@@ -10,9 +17,11 @@ const main = () => new Promise(resolve => {
             namespace['_context'] = {'stop': resolve}
         }
         let context = vm.createContext(namespace)
-        content = '(async () => {\n' +code+"\n})()";
-        return new Promise((r, rej) => vm.runInContext(content, context).then(() => {r(context)}).catch(rej));
+        content = '(async () => {\n' +code+"\n})";
+        await vm.runInContext(content, context)();
+        return context;
     }
+    new tk.Entrypoint()(executor).then(console.log);
 
     let route = tk.Route.fromObject(JSON.parse(process.env.ROUTE))
 
