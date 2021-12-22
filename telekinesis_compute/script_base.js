@@ -1,13 +1,6 @@
 const tk = require('telekinesis-js');
 const vm = require('vm');
 
-
-async function executor(code, namespace, injectContext=false) {
-    content = '(async () => {\n' +code+"\n})()";
-    return await eval(content);
-}
-new tk.Entrypoint()(executor).then(console.log);
-
 const main = () => new Promise(resolve => {
     console.log('starting')
 
