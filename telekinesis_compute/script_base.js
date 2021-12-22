@@ -14,8 +14,6 @@ const main = () => new Promise(resolve => {
         await vm.runInContext(content, context)();
         return context;
     }
-    new tk.Entrypoint()(executor).then(console.log);
-
     let route = tk.Route.fromObject(JSON.parse(process.env.ROUTE))
 
     let entrypoint = new tk.Entrypoint(process.env.URL, process.env.PRIVATEKEY.replaceAll('\\', '\n'));
