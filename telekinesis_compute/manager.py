@@ -122,7 +122,7 @@ class AppManager:
             
         t = time.time()
         self.tasks[t] = asyncio.create_task(delayed_provisioning(t))
-        self.running[name] = d
+        self.running[name] = [*(self.running.get(name) or []), d]
         return d
 
     async def provision(self, number, language='python', *imports, upgrade=False):
