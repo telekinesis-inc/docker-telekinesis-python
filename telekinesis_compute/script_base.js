@@ -7,7 +7,7 @@ const main = () => new Promise(resolve => {
     async function executor(code, namespace, injectContext=false) {
         namespace = namespace || {};
         if (injectContext) {
-            namespace['_context'] = {'stop': resolve}
+            namespace['_context'] = {stop: resolve, require: require}
         }
         let context = vm.createContext(namespace)
         content = '(async () => {\n' +code+"\n})";
