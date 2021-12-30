@@ -14,7 +14,8 @@ def prepare_python_files(path, *dependencies):
         file_out.write(dockerfile)
 
     scriptbase = importlib.resources.read_text(__package__, "script_base.py")
-    script = scriptbase.replace('{{IMPORTS}}', '\n'.join('import '+ d for d in dependencies))
+    script = scriptbase.replace('{{IMPORTS}}', '\n'.join('import '+ d.replace('-', '_') for d in dependencies))
+    
 
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
         file_out.write(script)
