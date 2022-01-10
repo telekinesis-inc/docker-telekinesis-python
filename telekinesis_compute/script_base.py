@@ -1,7 +1,20 @@
 import asyncio
-import telekinesis as tk
 import os
 import json
+from contextlib import redirect_stdout
+
+import telekinesis as tk
+
+class StdOutCapture:
+    def __init__(self, callback):
+        self.callback = callback
+        self.tasks = []
+    def write(self, out):
+        if out != "\\n":
+            self.tasks.append(asyncio.create_task(self.request(out)._execute()))
+    async def gather(self):
+        await asyncio.gather(*self.tasks)
+        self.tasks.clear()
 
 class Instance:
     def __init__(self, lock):
@@ -12,7 +25,7 @@ class Instance:
         inputs = inputs or {}
         if scope:
             inputs.update(self.scopes.get(scope, {}))
-        prefix = 'async def _wrapper(_new, _print_callback):\n'
+        prefix = 'async def _wrapper(_new ):\n'
         # TODO print_callback
         content = ('\n'+code).replace('\n', '\n    ')
         suffix = """
@@ -21,7 +34,13 @@ class Instance:
             _new[_var] = eval(_var)"""
         exec(prefix+content+suffix, inputs)
         new_vars = {}
-        await inputs['_wrapper'](new_vars, print_callback)
+        if print_callback:
+            stdout = StdOutCapture(print_callback)
+            with redirect_stdout(stdout):
+                await inputs['_wrapper'](new_vars)
+                await stdout.gather()
+        else:
+            await inputs['_wrapper'](new_vars)
 
         if scope:
             self.scopes[scope] = new_vars
