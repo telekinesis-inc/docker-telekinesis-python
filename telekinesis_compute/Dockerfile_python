@@ -3,7 +3,7 @@ FROM python:3.9-slim-buster
 WORKDIR /usr/src/app/data
 
 RUN pip install telekinesis
-{{DEPENDENCIES}}
+{{PKG_DEPENDENCIES}}
 
 COPY script.py ..
 

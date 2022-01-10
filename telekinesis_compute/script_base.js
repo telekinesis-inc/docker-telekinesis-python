@@ -19,7 +19,7 @@ const main = () => new Promise(resolve => {
 
     let entrypoint = new tk.Entrypoint(process.env.URL, process.env.PRIVATEKEY.replaceAll('\\', '\n'));
 
-    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)({executor: executor, stop: resolve}))
+    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)({execute: executor, stop: resolve}))
 
     console.log('running');
 });

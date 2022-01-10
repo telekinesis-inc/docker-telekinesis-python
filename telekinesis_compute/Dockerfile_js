@@ -3,7 +3,7 @@ FROM node:17-buster-slim
 WORKDIR /usr/src/app
 
 RUN npm install telekinesis-js ws
-{{DEPENDENCIES}}
+{{PKG_DEPENDENCIES}}
 
 COPY script.js .
 

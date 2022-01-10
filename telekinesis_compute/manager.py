@@ -8,13 +8,13 @@ import docker
 
 def prepare_python_files(path, *dependencies):
     dockerbase = importlib.resources.read_text(__package__, f"Dockerfile_python")
-    dockerfile = dockerbase.replace('{{DEPENDENCIES}}', '\n'.join('RUN pip install '+ d for d in dependencies))
+    dockerfile = dockerbase.replace('{{PKG_DEPENDENCIES}}', '\n'.join('RUN pip install '+ d for d in dependencies))
 
     with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
         file_out.write(dockerfile)
 
     scriptbase = importlib.resources.read_text(__package__, "script_base.py")
-    script = scriptbase.replace('{{IMPORTS}}', '\n'.join('import '+ d.replace('-', '_') for d in dependencies))
+    script = '\n'.join(['import '+ d.replace('-', '_') for d in dependencies] + [scriptbase])
     
 
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
@@ -22,13 +22,13 @@ def prepare_python_files(path, *dependencies):
 
 def prepare_js_files(path, *dependencies):
     dockerbase = importlib.resources.read_text(__package__, "Dockerfile_js")
-    dockerfile = dockerbase.replace('{{DEPENDENCIES}}', '\n'.join('RUN npm install '+ d for d in dependencies))
+    dockerfile = dockerbase.replace('{{PKG_DEPENDENCIES}}', '\n'.join('RUN npm install '+ d for d in dependencies))
 
     with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
         file_out.write(dockerfile)
 
     scriptbase = importlib.resources.read_text(__package__, "script_base.js")
-    script = scriptbase.replace('{{IMPORTS}}', '\n'.join(f'require({d});' for d in dependencies))
+    script = '\n'.join([f'require({d});' for d in dependencies] + [scriptbase])
 
     with open(os.path.join(path, 'script.js'), 'w') as file_out:
         file_out.write(script)
@@ -100,7 +100,7 @@ class AppManager:
         d = await awaiter()
         # container = self.client.containers.get(container_id)
         
-        d.update({'container_id': container_id})
+        # d.update({'container_id': container_id})
         
         return d
 
