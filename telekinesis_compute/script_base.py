@@ -37,7 +37,7 @@ class Instance:
             stdout = StdOutCapture(print_callback)
             with redirect_stdout(stdout):
                 await inputs['_wrapper'](new_vars)
-                await stdout.gather()
+            await stdout.gather()
         else:
             await inputs['_wrapper'](new_vars)
 
