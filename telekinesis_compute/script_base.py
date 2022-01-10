@@ -10,8 +10,8 @@ class StdOutCapture:
         self.callback = callback
         self.tasks = []
     def write(self, out):
-        if out != "\\n":
-            self.tasks.append(asyncio.create_task(self.request(out)._execute()))
+        if out != "\n":
+            self.tasks.append(asyncio.create_task(self.callback(out)._execute()))
     async def gather(self):
         await asyncio.gather(*self.tasks)
         self.tasks.clear()
@@ -26,7 +26,6 @@ class Instance:
         if scope:
             inputs.update(self.scopes.get(scope, {}))
         prefix = 'async def _wrapper(_new ):\n'
-        # TODO print_callback
         content = ('\n'+code).replace('\n', '\n    ')
         suffix = """
     for _var in dir():
