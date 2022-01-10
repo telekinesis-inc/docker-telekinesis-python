@@ -21,7 +21,7 @@ class Instance:
             _new[_var] = eval(_var)"""
         exec(prefix+content+suffix, inputs)
         new_vars = {}
-        await inputs['_wrapper'](new_vars)
+        await inputs['_wrapper'](new_vars, print_callback)
 
         if scope:
             self.scopes[scope] = new_vars
