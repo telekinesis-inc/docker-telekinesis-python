@@ -84,9 +84,10 @@ class AppManager:
         route = await tk.Telekinesis(callback, self._session)._delegate(client_session.session_key.public_serial())
 
         environment=[
-            "URL='"+self.url+"'",
-            "ROUTE='"+json.dumps(route.to_dict())+"'",
-            "PRIVATEKEY='"+client_session.session_key._private_serial().decode().strip('\n').replace('\n','\\')+"'"]
+            "TELEKINESIS_URL='"+self.url+"'",
+            "TELEKINESIS_INSTANCE_NAME='"+tag+"'",
+            "TELEKINESIS_ROUTE='"+json.dumps(route.to_dict())+"'",
+            "TELEKINESIS_PRIVATE_KEY_STR='"+json.dumps(client_session.session_key._private_serial().decode().strip('\n'))+"'"]
         
         cmd = f"docker run -e {' -e '.join(environment)} -d --rm --network=host -l telekinesis-compute {tag}"
         
