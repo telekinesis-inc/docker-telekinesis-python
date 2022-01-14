@@ -77,7 +77,9 @@ class AppManager:
 
             return (awaiter, lambda x: data.update({'data': x}) or e.set())
 
-        awaiter, callback = create_callbackable()
+        awaiter, [instance_name, callback] = create_callbackable()
+
+        assert instance_name == tag
         
         client_session = tk.Session()
 
