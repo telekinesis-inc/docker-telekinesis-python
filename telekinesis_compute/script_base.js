@@ -15,11 +15,13 @@ const main = () => new Promise(resolve => {
         await vm.runInContext(content, context)();
         return context;
     }
-    let route = tk.Route.fromObject(JSON.parse(process.env.ROUTE))
+    let route = tk.Route.fromObject(JSON.parse(process.env.TELEKINESIS_ROUTE))
 
-    let entrypoint = new tk.Entrypoint(process.env.URL, process.env.PRIVATEKEY.replaceAll('\\', '\n'));
+    let entrypoint = new tk.Entrypoint(process.env.TELEKINESIS_URL, JSON.parse(process.env.TELEKINESIS_PRIVATE_KEY_STR));
 
-    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)({execute: executor, stop: resolve}))
+    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)(
+        process.env.TELEKINESIS_INSTANCE_NAME,
+        {execute: executor, stop: resolve}))
 
     console.log('running');
 });
