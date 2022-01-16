@@ -31,6 +31,7 @@ class StdOutCapture:
             asyncio.create_task(self.callback(*self.acc))
         self.acc.clear()
 
+
 class Instance:
     def __init__(self, name, executor, lock):
         self.name = name
@@ -79,6 +80,7 @@ class Instance:
     def __repr__(self):
         return f'Instance<{self.name}>'
 
+
 class Job:
     def __init__(self, code, inputs, print_callback, cb, loop):
         self.code = code
@@ -87,6 +89,7 @@ class Job:
         self.cb = cb
         self.loop = loop
         self.returns = None
+
 
 class Executor:
     def __init__(self):
@@ -155,7 +158,7 @@ def decode_args():
         if arg.startswith('--'):
             in_kws = True
             key = arg[2:]
-            if i == len(argv):
+            if i == (len(argv)-1):
                 kwargs[key] = True
             continue
         if in_kws:
@@ -185,11 +188,13 @@ async def start_instance(executor, url, instance_name, private_key_str=None, key
         await tk.authenticate(url, private_key).set(instance_name, instance)
     await lock.wait()
 
+
 def run_in_new_event_loop(future):
     l = asyncio.new_event_loop()
     asyncio.set_event_loop(l)
     
     l.run_until_complete(future)
+
 
 executor = Executor()
 
