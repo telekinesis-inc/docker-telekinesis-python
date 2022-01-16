@@ -15,7 +15,7 @@ const main = () => new Promise(resolve => {
         await vm.runInContext(content, context)();
         return context;
     }
-    let route = tk.Route.fromObject(JSON.parse(process.env.TELEKINESIS_ROUTE))
+    let route = tk.Route.fromObject(JSON.parse(process.env.TELEKINESIS_ROUTE_STR))
 
     let entrypoint = new tk.Entrypoint(process.env.TELEKINESIS_URL, JSON.parse(process.env.TELEKINESIS_PRIVATE_KEY_STR));
 

@@ -35,9 +35,9 @@ class Instance:
     def __init__(self, name, executor, lock):
         self.name = name
         self.scopes = {}
-        self.executor = executor
+        self._executor = executor
         self.log = []
-        self.lock = lock
+        self._lock = lock
 
     async def execute(self, code, inputs=None, scope=None, print_callback=None):
         lock = asyncio.Event()
@@ -54,7 +54,7 @@ class Instance:
                 await print_callback(*args)
 
         job = Job(code, inputs, pcb, st, asyncio.get_event_loop())
-        self.executor.enqueue(job)
+        self._executor.enqueue(job)
         await lock.wait()
         t, new_vars = job.returns
         if t == 'return':
@@ -67,14 +67,14 @@ class Instance:
             raise new_vars
 
     def stop(self):
-        self.executor.stop_lock.set()
+        self._executor.stop_lock.set()
         self.interrupt()
-        self.lock.set()
+        self._lock.set()
 
     def interrupt(self):
-        self.executor.queue.clear()
-        if self.executor.call_lock.isSet():
-            signal.raise_signal(signal.SIGINT)
+        self._executor.queue.clear()
+        if self._executor.call_lock.isSet():
+            os.kill(os.getpid(), signal.SIGINT)
 
     def __repr__(self):
         return f'Instance<{self.name}>'
@@ -179,7 +179,7 @@ async def start_instance(executor, url, instance_name, private_key_str=None, key
 
     if route_str:
         entrypoint = await tk.Entrypoint(url, private_key)
-        route = tk.Route(**json.loads(os.environ['TELEKINESIS_ROUTE']))
+        route = tk.Route(**json.loads(route_str))
         await tk.Telekinesis(route, entrypoint._session)(instance_name, instance)
     else:
         await tk.authenticate(url, private_key).set(instance_name, instance)

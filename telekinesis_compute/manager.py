@@ -75,11 +75,10 @@ class AppManager:
                 print('called awaiter')
                 return data['data']
 
-            return (awaiter, lambda x: data.update({'data': x}) or e.set())
+            return (awaiter, lambda *x: data.update({'data': x}) or e.set())
 
-        awaiter, [instance_name, callback] = create_callbackable()
+        awaiter, callback = create_callbackable()
 
-        assert instance_name == tag
         
         client_session = tk.Session()
 
@@ -88,7 +87,7 @@ class AppManager:
         environment=[
             "TELEKINESIS_URL='"+self.url+"'",
             "TELEKINESIS_INSTANCE_NAME='"+tag+"'",
-            "TELEKINESIS_ROUTE='"+json.dumps(route.to_dict())+"'",
+            "TELEKINESIS_ROUTE_STR='"+json.dumps(route.to_dict())+"'",
             "TELEKINESIS_PRIVATE_KEY_STR='"+json.dumps(client_session.session_key._private_serial().decode().strip('\n'))+"'"]
         
         cmd = f"docker run -e {' -e '.join(environment)} -d --rm --network=host -l telekinesis-compute {tag}"
@@ -100,12 +99,13 @@ class AppManager:
 
         container_id = (await process.stdout.read()).decode().replace('\n','')
 
-        d = await awaiter()
+        instance_name, instance = await awaiter()
+        assert instance_name == tag
         # container = self.client.containers.get(container_id)
         
         # d.update({'container_id': container_id})
         
-        return d
+        return instance
 
     async def clear_containers(self):
         [c.stop(timeout=0) for c in self.client.containers.list(all=True, filters={'label': 'telekinesis-compute'})]
