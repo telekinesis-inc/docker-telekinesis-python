@@ -62,7 +62,7 @@ class AppManager:
         await build.stdout.read()
         # await self.client.images.build(path_dockerfile='./docker_telekinesis_python/', tag=tag)
 
-    async def create_container(self, language='python', *dependencies):
+    async def create_container(self, language='python', *dependencies, **kwargs):
         tag = '-'.join(['tk', language, *dependencies])
 
 
@@ -90,7 +90,7 @@ class AppManager:
             "TELEKINESIS_ROUTE_STR='"+json.dumps(route.to_dict())+"'",
             "TELEKINESIS_PRIVATE_KEY_STR='"+json.dumps(client_session.session_key._private_serial().decode().strip('\n'))+"'"]
         
-        cmd = f"docker run -e {' -e '.join(environment)} -d --rm --network=host -l telekinesis-compute {tag}"
+        cmd = f"docker run -e {' -e '.join(environment)} -d --rm --network=host {' '.join('--'+key+'='+val for key, val in kwargs.items())} -l telekinesis-compute {tag}"
         
         process = await asyncio.create_subprocess_shell(
             cmd,
@@ -113,23 +113,23 @@ class AppManager:
 
         return self.client.images.prune()
     
-    async def get_instance(self, name, language='python', *imports, upgrade=False):
+    async def get_instance(self, name, language='python', *imports, upgrade=False, **kwargs):
         tag = '-'.join(['tk', language, *imports])
         if not self.ready.get(tag):
             print('awaiting provisioning')
-            await self.provision(1, language, *imports, upgrade=upgrade)
+            await self.provision(1, language, *imports, upgrade=upgrade, **kwargs)
         d = self.ready[tag].pop()
-        async def delayed_provisioning(t):
-            await asyncio.sleep(1)
-            await self.provision(1, language, *imports, upgrade=upgrade)
-            self.tasks.pop(t)
+        # async def delayed_provisioning(t):
+        #     await asyncio.sleep(1)
+        #     await self.provision(1, language, *imports, upgrade=upgrade, **kwargs)
+        #     self.tasks.pop(t)
             
         t = time.time()
-        self.tasks[t] = asyncio.create_task(delayed_provisioning(t))
+        # self.tasks[t] = asyncio.create_task(delayed_provisioning(t))
         self.running[name] = [*(self.running.get(name) or []), d]
         return d
 
-    async def provision(self, number, language='python', *imports, upgrade=False):
+    async def provision(self, number, language='python', *imports, upgrade=False, **kwargs):
         print('provisioning', number)
         tag = '-'.join(['tk', language, *imports])
         if not tag in self.ready:
@@ -139,6 +139,6 @@ class AppManager:
             await self.build_image(language, *imports)
 
         self.ready[tag].extend(
-            await asyncio.gather(*[self.create_container(language, *imports) for _ in range(number)])
+            await asyncio.gather(*[self.create_container(language, *imports, **kwargs) for _ in range(number)])
         )
     
