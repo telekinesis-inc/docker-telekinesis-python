@@ -20,6 +20,20 @@ def prepare_python_files(path, *dependencies):
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
         file_out.write(script)
 
+def prepare_pytorch_files(path, *dependencies):
+    dockerbase = importlib.resources.read_text(__package__, f"Dockerfile_pytorch")
+    dockerfile = dockerbase.replace('{{PKG_DEPENDENCIES}}', '\n'.join('RUN pip install '+ d for d in dependencies))
+
+    with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
+        file_out.write(dockerfile)
+
+    scriptbase = importlib.resources.read_text(__package__, "script_base.py")
+    script = '\n'.join(['import '+ d.replace('-', '_') for d in set(dependencies).union(['torch'])] + [scriptbase])
+    
+
+    with open(os.path.join(path, 'script.py'), 'w') as file_out:
+        file_out.write(script)
+
 def prepare_js_files(path, *dependencies):
     dockerbase = importlib.resources.read_text(__package__, "Dockerfile_js")
     dockerfile = dockerbase.replace('{{PKG_DEPENDENCIES}}', '\n'.join('RUN npm install '+ d for d in dependencies))
@@ -47,6 +61,8 @@ class AppManager:
         tag = '-'.join(['tk', language, *dependencies])
         if language == 'python':
             prepare_python_files(self.path, *dependencies)
+        elif language == 'pytorch':
+            prepare_pytorch_files(self.path, *dependencies)
         elif language == 'js':
             prepare_js_files(self.path, *dependencies)
         else:
@@ -78,7 +94,6 @@ class AppManager:
             return (awaiter, lambda *x: data.update({'data': x}) or e.set())
 
         awaiter, callback = create_callbackable()
-
         
         client_session = tk.Session()
 
@@ -90,7 +105,7 @@ class AppManager:
             "TELEKINESIS_ROUTE_STR='"+json.dumps(route.to_dict())+"'",
             "TELEKINESIS_PRIVATE_KEY_STR='"+json.dumps(client_session.session_key._private_serial().decode().strip('\n'))+"'"]
         
-        cmd = f"docker run -e {' -e '.join(environment)} -d --rm --network=host {' '.join('--'+key+'='+val for key, val in kwargs.items())} -l telekinesis-compute {tag}"
+        cmd = f"docker run -e {' -e '.join(environment)} -d --rm --network=host {'--gpus all --ipc=host' if language == 'pytorch' else ''} {' '.join('--'+key+'='+val for key, val in kwargs.items())} -l telekinesis-compute {tag}"
         
         process = await asyncio.create_subprocess_shell(
             cmd,

@@ -11,7 +11,7 @@ setuptools.setup(
     description="",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/telekinesis-cloud/telekinesis-compute",
+    url="https://github.com/telekinesis-inc/telekinesis_compute",
     packages=setuptools.find_packages(),
     package_data={'telekinesis_compute': ['Dockerfile_python', 'Dockerfile_js']},
     install_requires=["docker", "telekinesis"],

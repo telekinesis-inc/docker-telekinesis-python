@@ -1,0 +1,10 @@
+FROM pytorch/pytorch:latest
+
+WORKDIR /usr/src/app/data
+
+RUN pip install telekinesis
+{{PKG_DEPENDENCIES}}
+
+COPY script.py ..
+
+ENTRYPOINT ["python", "../script.py"]
