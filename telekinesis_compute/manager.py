@@ -8,13 +8,16 @@ import docker
 
 def prepare_python_files(path, *dependencies):
     dockerbase = importlib.resources.read_text(__package__, f"Dockerfile_python")
-    dockerfile = dockerbase.replace('{{PKG_DEPENDENCIES}}', '\n'.join('RUN pip install '+ d for d in dependencies))
+    deps_pip_names = [d if isinstance(d, str) else d[0] for d in dependencies]
+    deps_import_names = [d if isinstance(d, str) else d[1] for d in dependencies]
+
+    dockerfile = dockerbase.replace('{{PKG_DEPENDENCIES}}', '\n'.join('RUN pip install '+ d for d in deps_pip_names))
 
     with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
         file_out.write(dockerfile)
 
     scriptbase = importlib.resources.read_text(__package__, "script_base.py")
-    script = '\n'.join(['import '+ d.replace('-', '_') for d in dependencies] + [scriptbase])
+    script = '\n'.join(['import '+ d.replace('-', '_') for d in deps_import_names] + [scriptbase])
     
 
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
@@ -22,13 +25,16 @@ def prepare_python_files(path, *dependencies):
 
 def prepare_pytorch_files(path, *dependencies):
     dockerbase = importlib.resources.read_text(__package__, f"Dockerfile_pytorch")
-    dockerfile = dockerbase.replace('{{PKG_DEPENDENCIES}}', '\n'.join('RUN pip install '+ d for d in dependencies))
+    deps_pip_names = [d if isinstance(d, str) else d[0] for d in dependencies]
+    deps_import_names = [d if isinstance(d, str) else d[1] for d in dependencies]
+
+    dockerfile = dockerbase.replace('{{PKG_DEPENDENCIES}}', '\n'.join('RUN pip install '+ d for d in deps_pip_names))
 
     with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
         file_out.write(dockerfile)
 
     scriptbase = importlib.resources.read_text(__package__, "script_base.py")
-    script = '\n'.join(['import '+ d.replace('-', '_') for d in set(dependencies).union(['torch'])] + [scriptbase])
+    script = '\n'.join(['import '+ d.replace('-', '_') for d in set(deps_import_names).union(['torch'])] + [scriptbase])
     
 
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
@@ -57,14 +63,14 @@ class AppManager:
         self.path = path
         self.tasks = {}
 
-    async def build_image(self, *dependencies, language='python'):
-        tag = '-'.join(['tk', language, *dependencies])
+    async def build_image(self, *pkg_dependencies, language='python'):
+        tag = '-'.join(['tk', language, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
         if language == 'python':
-            prepare_python_files(self.path, *dependencies)
+            prepare_python_files(self.path, *pkg_dependencies)
         elif language == 'pytorch':
-            prepare_pytorch_files(self.path, *dependencies)
+            prepare_pytorch_files(self.path, *pkg_dependencies)
         elif language == 'js':
-            prepare_js_files(self.path, *dependencies)
+            prepare_js_files(self.path, *pkg_dependencies)
         else:
             raise NotImplementedError("Only implemented languages are 'python' and 'js'")
 
@@ -78,8 +84,8 @@ class AppManager:
         await build.stdout.read()
         # await self.client.images.build(path_dockerfile='./docker_telekinesis_python/', tag=tag)
 
-    async def create_container(self, *dependencies, language='python', **kwargs):
-        tag = '-'.join(['tk', language, *dependencies])
+    async def create_container(self, *pkg_dependencies, language='python', **kwargs):
+        tag = '-'.join(['tk', language, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
 
 
         def create_callbackable():
@@ -128,11 +134,16 @@ class AppManager:
 
         return self.client.images.prune()
     
-    async def get_pod(self, name, *imports, upgrade=False, language='python', **kwargs):
-        tag = '-'.join(['tk', language, *imports])
+    async def get_pod(self, *pkg_dependencies, name='', language='python', upgrade=False, **kwargs):
+        # Example usage:
+        #   app_manager.get_pod('numpy', ['scikit-learn', 'sklearn'], name='myPod')
+        #   app_manager.get_pod(language='js')
+        #   app_manager.get_pod(language='pytorch')
+
+        tag = '-'.join(['tk', language, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
         if not self.ready.get(tag):
             print('awaiting provisioning')
-            await self.provision(1, *imports, language=language, upgrade=upgrade, **kwargs)
+            await self.provision(1, *pkg_dependencies, language=language, upgrade=upgrade, **kwargs)
         d = self.ready[tag].pop()
         # async def delayed_provisioning(t):
         #     await asyncio.sleep(1)
@@ -144,16 +155,16 @@ class AppManager:
         self.running[name] = [*(self.running.get(name) or []), d]
         return d
 
-    async def provision(self, number, *imports, language='python', upgrade=False, **kwargs):
+    async def provision(self, number, *pkg_dependencies, language='python', upgrade=False, **kwargs):
         print('provisioning', number)
-        tag = '-'.join(['tk', language, *imports])
+        tag = '-'.join(['tk', language, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
         if not tag in self.ready:
             self.ready[tag] = []
 
         if upgrade or not self.client.images.list(name=tag):
-            await self.build_image(*imports, language=language)
+            await self.build_image(*pkg_dependencies, language=language)
 
         self.ready[tag].extend(
-            await asyncio.gather(*[self.create_container(*imports, language=language **kwargs) for _ in range(number)])
+            await asyncio.gather(*[self.create_container(*pkg_dependencies, language=language, **kwargs) for _ in range(number)])
         )
     
