@@ -57,7 +57,7 @@ class AppManager:
         self.path = path
         self.tasks = {}
 
-    async def build_image(self, language, *dependencies):
+    async def build_image(self, *dependencies, language='python'):
         tag = '-'.join(['tk', language, *dependencies])
         if language == 'python':
             prepare_python_files(self.path, *dependencies)
@@ -78,7 +78,7 @@ class AppManager:
         await build.stdout.read()
         # await self.client.images.build(path_dockerfile='./docker_telekinesis_python/', tag=tag)
 
-    async def create_container(self, language='python', *dependencies, **kwargs):
+    async def create_container(self, *dependencies, language='python', **kwargs):
         tag = '-'.join(['tk', language, *dependencies])
 
 
@@ -128,11 +128,11 @@ class AppManager:
 
         return self.client.images.prune()
     
-    async def get_instance(self, name, language='python', *imports, upgrade=False, **kwargs):
+    async def get_instance(self, name, *imports, upgrade=False, language='python', **kwargs):
         tag = '-'.join(['tk', language, *imports])
         if not self.ready.get(tag):
             print('awaiting provisioning')
-            await self.provision(1, language, *imports, upgrade=upgrade, **kwargs)
+            await self.provision(1, *imports, language=language, upgrade=upgrade, **kwargs)
         d = self.ready[tag].pop()
         # async def delayed_provisioning(t):
         #     await asyncio.sleep(1)
@@ -144,16 +144,16 @@ class AppManager:
         self.running[name] = [*(self.running.get(name) or []), d]
         return d
 
-    async def provision(self, number, language='python', *imports, upgrade=False, **kwargs):
+    async def provision(self, number, *imports, language='python', upgrade=False, **kwargs):
         print('provisioning', number)
         tag = '-'.join(['tk', language, *imports])
         if not tag in self.ready:
             self.ready[tag] = []
 
         if upgrade or not self.client.images.list(name=tag):
-            await self.build_image(language, *imports)
+            await self.build_image(*imports, language=language)
 
         self.ready[tag].extend(
-            await asyncio.gather(*[self.create_container(language, *imports, **kwargs) for _ in range(number)])
+            await asyncio.gather(*[self.create_container(*imports, language=language **kwargs) for _ in range(number)])
         )
     

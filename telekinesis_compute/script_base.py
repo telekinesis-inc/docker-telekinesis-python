@@ -77,6 +77,14 @@ class Instance:
         if self._executor.call_lock.isSet():
             os.kill(os.getpid(), signal.SIGINT)
 
+    async def install_package(self, package_name):
+        process = await asyncio.create_subprocess_shell(
+            'pip install '+ package_name, 
+            stderr=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE)
+        
+        return (await process.stderr.read(), await process.stdout.read())
+
     def __repr__(self):
         return f'Instance<{self.name}>'
 
@@ -106,7 +114,7 @@ class Executor:
         content = ('\n'+code).replace('\n', '\n ')
         suffix = "\n for _var in dir():\n  if _var[0] != '_':\n   _new[_var] = eval(_var)"
         
-        exec(prefix+content+suffix, inputs)
+        exec(prefix+content+suffix, {}, inputs)
         new_vars = {}
         if print_callback:
             stderr = StdOutCapture(print_callback, loop, True)
