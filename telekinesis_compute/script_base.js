@@ -14,7 +14,7 @@ class ConsoleCapture {
   }
 }
 
-class Instance {
+class Pod {
   constructor(name, resolve) {
     this.name = name;
     this.scopes = {};
@@ -56,7 +56,7 @@ function decodeArgs() {
       kwargs[key] = val;
     }
   }
-  const argsOrder = ['url', 'instance_name', 'private_key_str', 'key_password', 'key_filename', 'route_str'];
+  const argsOrder = ['url', 'pod_name', 'private_key_str', 'key_password', 'key_filename', 'route_str'];
   const argv = process.argv.slice(2);
   let key = null;
   let inKws = false
@@ -89,17 +89,17 @@ function decodeArgs() {
 
 const main = (kwargs) => new Promise(resolve => {
   if (!('url' in kwargs)) {throw 'Missing url argument'}
-  if (!('instance_name' in kwargs)) {throw 'Missing instance_name argument'}
+  if (!('pod_name' in kwargs)) {throw 'Missing pod_name argument'}
 
-  let instance = new Instance(kwargs.instance_name, resolve)
+  let pod = new Pod(kwargs.pod_name, resolve)
   let privateKey = 'private_key_str' in kwargs? JSON.parse(kwargs.private_key_str) : undefined;
 
   if (kwargs.route_str) {
     let entrypoint = new tk.Entrypoint(kwargs.url, privateKey);
     let route = tk.Route.fromObject(JSON.parse(kwargs.route_str));
-    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)(kwargs.instance_name, instance));
+    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)(kwargs.pod_name, pod));
   } else {
-    tk.authenticate(kwargs.url, privateKey).set(kwargs.instance_name, instance).then(() => console.log('>> Instance is running'))
+    tk.authenticate(kwargs.url, privateKey).set(kwargs.pod_name, pod).then(() => console.log('>> Pod is running'))
   }
 });
 main(decodeArgs()).then(console.log)

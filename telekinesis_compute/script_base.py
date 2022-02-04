@@ -32,7 +32,7 @@ class StdOutCapture:
         self.acc.clear()
 
 
-class Instance:
+class Pod:
     def __init__(self, name, executor, lock):
         self.name = name
         self.scopes = {}
@@ -86,7 +86,7 @@ class Instance:
         return (await process.stderr.read(), await process.stdout.read())
 
     def __repr__(self):
-        return f'Instance<{self.name}>'
+        return f'Pod<{self.name}>'
 
 
 class Job:
@@ -151,7 +151,7 @@ def decode_args():
         if env.startswith('TELEKINESIS_'):
             key = env[len('TELEKINESIS_'):].lower()
             kwargs[key] = val
-    args_order = ('url', 'instance_name', 'private_key_str', 'key_password', 'key_filename', 'route_str')
+    args_order = ('url', 'pod_name', 'private_key_str', 'key_password', 'key_filename', 'route_str')
     argv = sys.argv[1:]
     key = None
     in_kws = False
@@ -176,7 +176,7 @@ def decode_args():
     return kwargs 
 
 
-async def start_instance(executor, url, instance_name, private_key_str=None, key_password=None, key_filename=None, route_str=None, **_):
+async def start_pod(executor, url, pod_name, private_key_str=None, key_password=None, key_filename=None, route_str=None, **_):
     private_key = None
     if private_key_str:
         private_key = tk.cryptography.PrivateKey.from_private_serial(json.loads(private_key_str).encode(), key_password)
@@ -186,14 +186,14 @@ async def start_instance(executor, url, instance_name, private_key_str=None, key
         private_key = tk.cryptography.PrivateKey(key_filename, key_password)
 
     lock = asyncio.Event()
-    instance = Instance(instance_name, executor, lock)
+    pod = Pod(pod_name, executor, lock)
 
     if route_str:
         entrypoint = await tk.Entrypoint(url, private_key)
         route = tk.Route(**json.loads(route_str))
-        await tk.Telekinesis(route, entrypoint._session)(instance_name, instance)
+        await tk.Telekinesis(route, entrypoint._session)(pod_name, pod)
     else:
-        await tk.authenticate(url, private_key).set(instance_name, instance)
+        await tk.authenticate(url, private_key).set(pod_name, pod)
     await lock.wait()
 
 
@@ -206,6 +206,6 @@ def run_in_new_event_loop(future):
 
 executor = Executor()
 
-threading.Thread(target=run_in_new_event_loop, args=[start_instance(executor, **decode_args())]).start()
+threading.Thread(target=run_in_new_event_loop, args=[start_pod(executor, **decode_args())]).start()
 
 asyncio.run(executor.run())

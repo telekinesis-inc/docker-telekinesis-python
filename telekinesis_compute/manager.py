@@ -101,7 +101,7 @@ class AppManager:
 
         environment=[
             "TELEKINESIS_URL='"+self.url+"'",
-            "TELEKINESIS_INSTANCE_NAME='"+tag+"'",
+            "TELEKINESIS_POD_NAME='"+tag+"'",
             "TELEKINESIS_ROUTE_STR='"+json.dumps(route.to_dict())+"'",
             "TELEKINESIS_PRIVATE_KEY_STR='"+json.dumps(client_session.session_key._private_serial().decode().strip('\n'))+"'"]
         
@@ -114,13 +114,13 @@ class AppManager:
 
         container_id = (await process.stdout.read()).decode().replace('\n','')
 
-        instance_name, instance = await awaiter()
-        assert instance_name == tag
+        pod_name, pod = await awaiter()
+        assert pod_name == tag
         # container = self.client.containers.get(container_id)
         
         # d.update({'container_id': container_id})
         
-        return instance
+        return pod
 
     async def clear_containers(self):
         [c.stop(timeout=0) for c in self.client.containers.list(all=True, filters={'label': 'telekinesis-compute'})]
@@ -128,7 +128,7 @@ class AppManager:
 
         return self.client.images.prune()
     
-    async def get_instance(self, name, *imports, upgrade=False, language='python', **kwargs):
+    async def get_pod(self, name, *imports, upgrade=False, language='python', **kwargs):
         tag = '-'.join(['tk', language, *imports])
         if not self.ready.get(tag):
             print('awaiting provisioning')
