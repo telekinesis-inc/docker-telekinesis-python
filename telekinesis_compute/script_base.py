@@ -110,20 +110,21 @@ class Executor:
         self.call_lock.set()
 
     async def _execute(self, code, inputs, print_callback, loop):
-        prefix = 'async def _wrapper(_new ):\n'
+        prefix = f'async def _tkc_wrapper({", ".join(["_tkc_new_vars", *[k for k in inputs]])}):\n'
         content = ('\n'+code).replace('\n', '\n ')
-        suffix = "\n for _var in dir():\n  if _var[0] != '_':\n   _new[_var] = eval(_var)"
+        suffix = "\n for _var in dir():\n  if _var[0] != '_':\n   _tkc_new_vars[_var] = eval(_var)"
         
-        exec(prefix+content+suffix, {}, inputs)
+        tmp = {}
+        exec(prefix+content+suffix, tmp)
         new_vars = {}
         if print_callback:
             stderr = StdOutCapture(print_callback, loop, True)
             with redirect_stderr(stderr):
                 stdout = StdOutCapture(print_callback, loop)
                 with redirect_stdout(stdout):
-                    await inputs['_wrapper'](new_vars)
+                    await tmp['_tkc_wrapper'](new_vars, **inputs)
         else:
-            await inputs['_wrapper'](new_vars)
+            await tmp['_tkc_wrapper'](new_vars, **inputs)
         return new_vars
 
     async def run(self):
