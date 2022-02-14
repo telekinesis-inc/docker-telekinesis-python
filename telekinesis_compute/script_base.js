@@ -19,7 +19,8 @@ class Pod {
     this.name = name;
     this.scopes = {};
     this.log = [];
-    this._resolve = resolve
+    this._resolve = resolve;
+    this._stopCallback = undefined;
   }
   async execute(code, inputs, scope, logCallback) {
     inputs = inputs || {};
@@ -45,6 +46,12 @@ class Pod {
   }
   stop() {
     this._resolve()
+    if (this._stopCallback) {
+      this._stopCallback().then(() => null);
+    }
+  }
+  _updateStopCallback(callback) {
+    this._stopCallback = callback;
   }
 }
 
@@ -97,7 +104,7 @@ const main = (kwargs) => new Promise(resolve => {
   if (kwargs.route_str) {
     let entrypoint = new tk.Entrypoint(kwargs.url, privateKey);
     let route = tk.Route.fromObject(JSON.parse(kwargs.route_str));
-    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)(kwargs.pod_name, pod));
+    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)(pod._updateStopCallback, pod));
   } else {
     tk.authenticate(kwargs.url, privateKey).set(kwargs.pod_name, pod).then(() => console.log('>> Pod is running'))
   }
