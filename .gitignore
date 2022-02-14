@@ -1,3 +1,5 @@
+ignore/
+
 .vscode
 __pycache__
 Dockerfile

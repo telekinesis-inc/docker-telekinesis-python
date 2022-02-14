@@ -39,16 +39,17 @@ class Pod:
         self._executor = executor
         self.log = []
         self._lock = lock
+        self._stop_callback = None
 
     async def execute(self, code, inputs=None, scope=None, print_callback=None):
         lock = asyncio.Event()
-        
+
         inputs = inputs or {}
         if scope:
             inputs.update(self.scopes.get(scope, {}))
         async def st():
             lock.set()
-        
+
         async def pcb(*args):
             self.log.append(args)
             if print_callback:
@@ -67,9 +68,11 @@ class Pod:
         else:
             raise new_vars
 
-    def stop(self):
+    async def stop(self):
         self._executor.stop_lock.set()
         self.interrupt()
+        if self._stop_callback:
+            await self._stop_callback()
         self._lock.set()
 
     def interrupt(self):
@@ -79,14 +82,17 @@ class Pod:
 
     async def install_package(self, package_name):
         process = await asyncio.create_subprocess_shell(
-            'pip install '+ package_name, 
+            'pip install '+ package_name,
             stderr=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE)
-        
+
         return (await process.stderr.read(), await process.stdout.read())
 
+    def _update_stop_callback(self, callback):
+        self._stop_callback = callback
+
     def __repr__(self):
-        return f'Pod<{self.name}>'
+        return f'Pod({self.name})'
 
 
 class Job:
@@ -104,7 +110,7 @@ class Executor:
         self.call_lock = None
         self.stop_lock = threading.Event()
         self.queue = deque()
-    
+
     def enqueue(self, job):
         self.queue.append(job)
         self.call_lock.set()
@@ -113,7 +119,7 @@ class Executor:
         prefix = f'async def _tkc_wrapper({", ".join(["_tkc_new_vars", *[k for k in inputs]])}):\n'
         content = ('\n'+code).replace('\n', '\n ')
         suffix = "\n for _var in dir():\n  if _var[0] != '_':\n   _tkc_new_vars[_var] = eval(_var)"
-        
+
         tmp = {}
         exec(prefix+content+suffix, tmp)
         new_vars = {}
@@ -133,7 +139,7 @@ class Executor:
                 if self.stop_lock.is_set(): return
                 self.call_lock = threading.Event()
                 self.call_lock.wait(5)
-            
+
             job = self.queue.popleft()
             try:
                 r = await self._execute(job.code, job.inputs, job.print_callback, job.loop)
@@ -173,8 +179,8 @@ def decode_args():
         if in_kws:
             raise SyntaxError(f'Error parsing arguments: {sys.argv}')
         kwargs[args_order[i]] = arg
-    
-    return kwargs 
+
+    return kwargs
 
 
 async def start_pod(executor, url, pod_name, private_key_str=None, key_password=None, key_filename=None, route_str=None, **_):
@@ -192,7 +198,7 @@ async def start_pod(executor, url, pod_name, private_key_str=None, key_password=
     if route_str:
         entrypoint = await tk.Entrypoint(url, private_key)
         route = tk.Route(**json.loads(route_str))
-        await tk.Telekinesis(route, entrypoint._session)(pod_name, pod)
+        await tk.Telekinesis(route, entrypoint._session)(pod._update_stop_callback, pod)
     else:
         await tk.authenticate(url, private_key).set(pod_name, pod)
     await lock.wait()
@@ -201,7 +207,7 @@ async def start_pod(executor, url, pod_name, private_key_str=None, key_password=
 def run_in_new_event_loop(future):
     l = asyncio.new_event_loop()
     asyncio.set_event_loop(l)
-    
+
     l.run_until_complete(future)
 
 
@@ -210,3 +216,4 @@ executor = Executor()
 threading.Thread(target=run_in_new_event_loop, args=[start_pod(executor, **decode_args())]).start()
 
 asyncio.run(executor.run())
+
