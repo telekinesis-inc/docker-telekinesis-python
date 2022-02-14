@@ -1,4 +1,3 @@
-const { argv } = require('process');
 const tk = require('telekinesis-js');
 const vm = require('vm');
 
@@ -44,11 +43,11 @@ class Pod {
 
     return out;
   }
-  stop() {
-    this._resolve()
+  async stop() {
     if (this._stopCallback) {
-      this._stopCallback().then(() => null);
+      await this._stopCallback();
     }
+    this._resolve()
   }
   _updateStopCallback(callback) {
     this._stopCallback = callback;
@@ -59,7 +58,7 @@ function decodeArgs() {
   let kwargs = {}
   for (let [env, val] of Object.entries(process.env)) {
     if (env.slice(0, 'TELEKINESIS_'.length) === 'TELEKINESIS_') {
-      key = env.slice('TELEKINESIS_'.length).toLowerCase();
+      let key = env.slice('TELEKINESIS_'.length).toLowerCase();
       kwargs[key] = val;
     }
   }
@@ -104,7 +103,7 @@ const main = (kwargs) => new Promise(resolve => {
   if (kwargs.route_str) {
     let entrypoint = new tk.Entrypoint(kwargs.url, privateKey);
     let route = tk.Route.fromObject(JSON.parse(kwargs.route_str));
-    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)(pod._updateStopCallback, pod));
+    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)(cb => pod._updateStopCallback(cb), pod));
   } else {
     tk.authenticate(kwargs.url, privateKey).set(kwargs.pod_name, pod).then(() => console.log('>> Pod is running'))
   }
