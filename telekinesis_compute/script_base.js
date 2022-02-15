@@ -97,7 +97,7 @@ const main = (kwargs) => new Promise(resolve => {
   if (!('url' in kwargs)) {throw 'Missing url argument'}
   if (!('pod_name' in kwargs)) {throw 'Missing pod_name argument'}
 
-  let pod = new Pod(kwargs.pod_name, resolve)
+  let pod = new Pod(kwargs.pod_name, resolve);
   let privateKey = 'private_key_str' in kwargs? JSON.parse(kwargs.private_key_str) : undefined;
 
   if (kwargs.route_str) {

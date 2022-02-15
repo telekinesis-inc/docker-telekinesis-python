@@ -139,7 +139,10 @@ class AppManager:
 
         return self.client.images.prune()
 
-    async def get_pod(self, pkg_dependencies, account_id, base='python', cpus=1.0, memory=2000, gpu=False, stop_callback=None, provision=False, upgrade=False):
+    async def get_pod(
+        self, pkg_dependencies, account_id, base='python', cpus=1.0, memory=2000, gpu=False, autostop_timeout=None, stop_callback=None, 
+        provision=False, upgrade=False
+    ):
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
         if not self.ready.get(tag):
             print('awaiting provisioning')
@@ -150,6 +153,9 @@ class AppManager:
 
         if stop_callback:
             await pod_wrapper.update_stop_callback(partial(stop_callback, pod_wrapper.id))
+        
+        if autostop_timeout:
+            ...
 
         if provision:
             t = time.time()
