@@ -53,13 +53,9 @@ class Pod {
   _updateCallbacks(stopCallback, keepAliveCallback) {
     this._stopCallback = stopCallback;
     this._keepAliveCallback = keepAliveCallback;
-
-    console.error('_uC', stopCallback?._target?.session?.[1], keepAliveCallback?._target?.session?.[1])
   }
   _keepAlive(metadata) {
-    console.error('keep alive', this._keepAliveCallback?._target?.session[1])
     if (this._keepAliveCallback && metadata?.caller.session[0] != this._keepAliveCallback._target.session[0]) {
-      console.error('lets do this shittte')
       this._keepAliveCallback().then(() => null)
     }
   }
@@ -118,7 +114,7 @@ const main = (kwargs) => new Promise(resolve => {
     entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)((scb, kacb) => pod._updateCallbacks(scb, kacb), pod));
     entrypoint._session.messageListener = md => pod._keepAlive(md);
   } else {
-    tk.authenticate(kwargs.url, privateKey).data.set(kwargs.pod_name, pod).then(() => console.log('>> Pod is running'));
+    tk.authenticate(kwargs.url, privateKey).data.set(kwargs.pod_name, pod).then(() => console.error('>> Pod is running'));
   }
 });
 main(decodeArgs()).then(() => {throw new Error('Exiting');})
