@@ -127,10 +127,10 @@ class AppManager:
 
         container_id = (await process.stdout.read()).decode().replace('\n','')
 
-        update_stop_callback, pod = await awaiter()
+        update_callbacks, pod = await awaiter()
         # container = self.client.containers.get(container_id)
 
-        pod_wrapper = PodWrapper(pod, update_stop_callback)
+        pod_wrapper = PodWrapper(container_id, pod, update_callbacks)
         return pod_wrapper
 
     async def clear_containers(self):
@@ -151,11 +151,10 @@ class AppManager:
 
         self.running[account_id] = {**self.running.get(account_id, {}), pod_wrapper.id: pod_wrapper}
 
-        if stop_callback:
-            await pod_wrapper.update_stop_callback(partial(stop_callback, pod_wrapper.id))
+        if stop_callback or autostop_timeout is not None:
+            await pod_wrapper.update_params(stop_callback and partial(stop_callback, pod_wrapper.id), autostop_timeout)
+            pod_wrapper.reset_timeout()
         
-        if autostop_timeout:
-            ...
 
         if provision:
             t = time.time()
@@ -186,8 +185,43 @@ class AppManager:
             self.tasks['stop_callback'][time.time()] = asyncio.create_task(callback(pod_id)._execute())
 
 class PodWrapper:
-    def __init__(self, pod, update_stop_callback):
-        self.update_stop_callback = update_stop_callback
+    def __init__(self, container_id, pod, update_callbacks):
+        self.container_id = container_id
+        self.pod_update_callbacks = update_callbacks
         self.pod = pod
         self.id = pod._target.session[0]
+        self.stop_callback = None
+        self.autostop_timeout = None
+        self.autostop_time = 0
+        self.autostop_task = None
+
+    def reset_timeout(self):
+        print('>>>> keep alive')
+        if self.autostop_timeout is not None:
+            self.autostop_time = time.time() + self.autostop_timeout
+            if self.autostop_task is None:
+                self.autostop_task = asyncio.create_task(self.autostop(self.autostop_timeout))
+
+    async def autostop(self, delay):
+        await asyncio.sleep(delay)
+        if self.autostop_time and self.autostop_time < time.time():
+            p = await asyncio.create_subprocess_shell(
+                'docker stats --no-stream --format "{{.CPUPerc}}" '+self.container_id[:10],
+                stdout=asyncio.subprocess.PIPE)
+            cpu_utilization = float((await p.stdout.read()).decode().strip('%\n'))
+            if cpu_utilization < 1: # 1%
+                await self.pod.stop()
+            else:
+                print('extending cpu_utilization', cpu_utilization)
+                self.autostop_task = asyncio.create_task(self.autostop(max(2, self.autostop_timeout)))
+        else:
+            print('extending', self.autostop_time - time.time())
+            self.autostop_task = asyncio.create_task(self.autostop(max(2, self.autostop_time-time.time())))
+         
+
+    async def update_params(self, stop_callback, autostop_timeout):
+        self.stop_callback = stop_callback
+        self.autostop_timeout = autostop_timeout
+
+        await self.pod_update_callbacks(self.stop_callback or 0, self.reset_timeout or 0)
 

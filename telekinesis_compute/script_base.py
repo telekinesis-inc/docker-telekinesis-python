@@ -40,6 +40,7 @@ class Pod:
         self.log = []
         self._lock = lock
         self._stop_callback = None
+        self._keep_alive_callback = None
 
     async def execute(self, code, inputs=None, scope=None, print_callback=None):
         lock = asyncio.Event()
@@ -88,8 +89,13 @@ class Pod:
 
         return (await process.stderr.read(), await process.stdout.read())
 
-    def _update_stop_callback(self, callback):
-        self._stop_callback = callback
+    def _update_callbacks(self, stop_callback, keep_alive_callback):
+        self._stop_callback = stop_callback
+        self._keep_alive_callback = keep_alive_callback
+
+    def _keep_alive(self, metadata):
+        if self._keep_alive_callback and metadata.caller.session[0] != self._keep_alive_callback._target.session[0]:
+            asyncio.create_task(self._keep_alive_callback()._execute())
 
     def __repr__(self):
         return f'Pod({self.name})'
@@ -198,9 +204,11 @@ async def start_pod(executor, url, pod_name, private_key_str=None, key_password=
     if route_str:
         entrypoint = await tk.Entrypoint(url, private_key)
         route = tk.Route(**json.loads(route_str))
-        await tk.Telekinesis(route, entrypoint._session)(pod._update_stop_callback, pod)
+        await tk.Telekinesis(route, entrypoint._session)(pod._update_callbacks, pod)
+        entrypoint._session.message_listener = pod._keep_alive
     else:
-        await tk.authenticate(url, private_key).set(pod_name, pod)
+        await tk.authenticate(url, private_key).data.set(pod_name, pod)
+    
     await lock.wait()
 
 
