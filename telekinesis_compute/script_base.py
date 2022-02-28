@@ -47,7 +47,7 @@ class Pod:
 
         inputs = inputs or {}
         if scope:
-            inputs.update(self.scopes.get(scope, {}))
+            inputs.update({k: v for k, v in self.scopes.get(scope, {}).items() if k not in inputs.keys()})
         async def st():
             lock.set()
 
