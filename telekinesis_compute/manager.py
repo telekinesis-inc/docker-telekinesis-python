@@ -7,6 +7,8 @@ import telekinesis as tk
 import docker
 from functools import partial
 
+from telekinesis_data import FileSync
+
 def prepare_python_files(path, dependencies):
     dockerbase = importlib.resources.read_text(__package__, f"Dockerfile_python")
     deps_pip_names = [d if isinstance(d, str) else d[0] for d in dependencies]
@@ -61,7 +63,7 @@ class AppManager:
         self.client = docker.from_env()
         self.url = url or list(session.connections)[0].url
         self._session = session
-        self.path = path
+        self.path = os.path.abspath(path)
         self.tasks = {'delayed_provisioning': {}, 'stop_callback': {}}
 
     async def build_image(self, pkg_dependencies, base):
@@ -103,8 +105,10 @@ class AppManager:
         awaiter, callback = create_callbackable()
 
         client_session = tk.Session()
+        client_pubkey = client_session.session_key.public_serial()
+        os.mkdir(os.path.join(self.path, client_pubkey[:10]))
 
-        route = await tk.Telekinesis(callback, self._session)._delegate(client_session.session_key.public_serial())
+        route = await tk.Telekinesis(callback, self._session)._delegate(client_pubkey)
 
         _key_dump = json.dumps(client_session.session_key._private_serial().decode().strip('\n'))
         environment = [
@@ -115,7 +119,7 @@ class AppManager:
         ]
 
         cmd = " ".join([
-            f"docker run -e {' -e '.join(environment)} -d --rm --network=host",
+            f"docker run -e {' -e '.join(environment)} -d --rm --network=host -v {os.path.join(self.path, client_pubkey[:10])}:/usr/src/app/data/",
             f"{'--gpus all --ipc=host' if gpu else ''} --cpus={cpus:.2f} --memory='{int(memory)}m'",
             f"-l telekinesis-compute {tag}"
         ])
@@ -140,7 +144,7 @@ class AppManager:
         return self.client.images.prune()
 
     async def get_pod(
-        self, pkg_dependencies, account_id, base='python', cpus=1.0, memory=2000, gpu=False, autostop_timeout=None, stop_callback=None, 
+        self, pkg_dependencies, account_id, base='python', cpus=1.0, memory=2000, gpu=False, autostop_timeout=None, bind_data=None, stop_callback=None, 
         provision=False, upgrade=False
     ):
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
@@ -155,6 +159,12 @@ class AppManager:
             await pod_wrapper.update_params(stop_callback and partial(stop_callback, pod_wrapper.id), autostop_timeout)
             pod_wrapper.reset_timeout()
         
+        if bind_data:
+            data_path = os.path.join(self.path, pod_wrapper.id[:10])
+            support_path = data_path +'_support'
+            os.mkdir(support_path)
+
+            pod_wrapper.filesync = FileSync(bind_data, data_path, support_path)
 
         if provision:
             t = time.time()
@@ -194,6 +204,7 @@ class PodWrapper:
         self.autostop_timeout = None
         self.autostop_time = 0
         self.autostop_task = None
+        self.filesync = None
 
     def reset_timeout(self):
         print('>>>> keep alive')
