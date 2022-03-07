@@ -107,7 +107,7 @@ class AppManager:
         client_session = tk.Session()
         client_pubkey = client_session.session_key.public_serial()
         
-        data_path = os.path.join(self.path, pod_wrapper.id[:32].replace('/','-'))
+        data_path = os.path.join(self.path, client_pubkey[:32].replace('/','-'))
         os.mkdir(data_path)
 
         route = await tk.Telekinesis(callback, self._session)._delegate(client_pubkey)
