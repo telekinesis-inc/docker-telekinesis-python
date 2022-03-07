@@ -106,7 +106,9 @@ class AppManager:
 
         client_session = tk.Session()
         client_pubkey = client_session.session_key.public_serial()
-        os.mkdir(os.path.join(self.path, client_pubkey[:10]))
+        
+        data_path = os.path.join(self.path, pod_wrapper.id[:32].replace('/','-'))
+        os.mkdir(data_path)
 
         route = await tk.Telekinesis(callback, self._session)._delegate(client_pubkey)
 
@@ -119,7 +121,7 @@ class AppManager:
         ]
 
         cmd = " ".join([
-            f"docker run -e {' -e '.join(environment)} -d --rm --network=host -v {os.path.join(self.path, client_pubkey[:10])}:/usr/src/app/data/",
+            f"docker run -e {' -e '.join(environment)} -d --rm --network=host -v {data_path}:/usr/src/app/data/",
             f"{'--gpus all --ipc=host' if gpu else ''} --cpus={cpus:.2f} --memory='{int(memory)}m'",
             f"-l telekinesis-compute {tag}"
         ])
