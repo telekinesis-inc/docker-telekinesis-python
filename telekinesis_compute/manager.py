@@ -160,7 +160,7 @@ class AppManager:
             pod_wrapper.reset_timeout()
         
         if bind_data:
-            data_path = os.path.join(self.path, pod_wrapper.id[:10])
+            data_path = os.path.join(self.path, pod_wrapper.id[:32].replace('/','-'))
             support_path = data_path +'_support'
             os.mkdir(support_path)
 
