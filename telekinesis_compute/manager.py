@@ -121,7 +121,7 @@ class AppManager:
         ]
 
         cmd = " ".join([
-            f"docker run -e {' -e '.join(environment)} -d --rm --network=host -v {data_path}:/usr/src/app/data/",
+            f"docker run -e {' -e '.join(environment)} -d  --network=host -v {data_path}:/usr/src/app/data/",
             f"{'--gpus all --ipc=host' if gpu else ''} --cpus={cpus:.2f} --memory='{int(memory)}m'",
             f"-l telekinesis-compute {tag}"
         ])
@@ -192,9 +192,11 @@ class AppManager:
         )
 
     async def stop(self, account_id, pod_id, callback=None):
-        self.running.get(account_id, {}).pop(pod_id)
-        if callback:
+        p = self.running.get(account_id, {}).pop(pod_id)
+        if p and callback:
             self.tasks['stop_callback'][time.time()] = asyncio.create_task(callback(pod_id)._execute())
+        elif callback:
+            print(pod_id, 'not found')
 
     async def check_running(self):
         running_containers = (await (await asyncio.create_subprocess_shell(
@@ -202,7 +204,7 @@ class AppManager:
             stdout=asyncio.subprocess.PIPE)
         ).stdout.read()).decode().strip('\n').split('\n')
 
-        for account_pods in self._running.values():
+        for account_pods in self.running.values():
             for pod_wrapper in account_pods.values():
                 if pod_wrapper.container_id not in running_containers:
                     print('container stopped', pod_wrapper.container_id)
@@ -210,11 +212,11 @@ class AppManager:
     
     async def loop_check_running(self):
         while True:
-            try:
+            # try:
                 await asyncio.sleep(15)
                 await self.check_running()
-            except BaseException:
-                pass
+            # except BaseException:
+                # pass
 
 class PodWrapper:
     def __init__(self, container_id, pod, update_callbacks):
