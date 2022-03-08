@@ -157,9 +157,9 @@ class AppManager:
 
         self.running[account_id] = {**self.running.get(account_id, {}), pod_wrapper.id: pod_wrapper}
 
-        if stop_callback or autostop_timeout is not None:
-            await pod_wrapper.update_params(stop_callback and partial(stop_callback, pod_wrapper.id), autostop_timeout)
-            pod_wrapper.reset_timeout()
+        # if stop_callback or autostop_timeout is not None:
+        await pod_wrapper.update_params(partial(self.stop, account_id, pod_wrapper.id, stop_callback), autostop_timeout)
+        pod_wrapper.reset_timeout()
         
         if bind_data:
             data_path = os.path.join(self.path, pod_wrapper.id[:32].replace('/','-'))
@@ -257,7 +257,7 @@ class PodWrapper:
         self.stop_callback = stop_callback
         self.autostop_timeout = autostop_timeout
 
-        await self.pod_update_callbacks(self.stop, self.reset_timeout or 0)
+        await self.pod_update_callbacks(partial(self.stop, False), self.reset_timeout or 0)
     
     async def stop(self, stop_pod=True):
         if self.stop_callback:
