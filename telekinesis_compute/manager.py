@@ -64,7 +64,7 @@ class AppManager:
         self.url = url or list(session.connections)[0].url
         self._session = session
         self.path = os.path.abspath(path)
-        self.tasks = {'delayed_provisioning': {}, 'stop_callback': {}}
+        self.tasks = {'delayed_provisioning': {}, 'stop_callback': {}, 'check_running_loop': asyncio.create_task(self.loop_check_running())}
 
     async def build_image(self, pkg_dependencies, base):
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
@@ -196,6 +196,26 @@ class AppManager:
         if callback:
             self.tasks['stop_callback'][time.time()] = asyncio.create_task(callback(pod_id)._execute())
 
+    async def check_running(self):
+        running_containers = (await (await asyncio.create_subprocess_shell(
+            'docker container ls -q --no-trunc', 
+            stdout=asyncio.subprocess.PIPE)
+        ).stdout.read()).decode().strip('\n').split('\n')
+
+        for account_pods in self._running.values():
+            for pod_wrapper in account_pods.values():
+                if pod_wrapper.container_id not in running_containers:
+                    print('container stopped', pod_wrapper.container_id)
+                    await pod_wrapper.stop(False)
+    
+    async def loop_check_running(self):
+        while True:
+            try:
+                await asyncio.sleep(15)
+                await self.check_running()
+            except BaseException:
+                pass
+
 class PodWrapper:
     def __init__(self, container_id, pod, update_callbacks):
         self.container_id = container_id
@@ -223,7 +243,7 @@ class PodWrapper:
                 stdout=asyncio.subprocess.PIPE)
             cpu_utilization = float((await p.stdout.read()).decode().strip('%\n'))
             if cpu_utilization < 1: # 1%
-                await self.pod.stop()
+                await self.stop()
             else:
                 print('extending cpu_utilization', cpu_utilization)
                 self.autostop_task = asyncio.create_task(self.autostop(max(2, self.autostop_timeout)))
@@ -231,10 +251,22 @@ class PodWrapper:
             print('extending', self.autostop_time - time.time())
             self.autostop_task = asyncio.create_task(self.autostop(max(2, self.autostop_time-time.time())))
          
-
     async def update_params(self, stop_callback, autostop_timeout):
         self.stop_callback = stop_callback
         self.autostop_timeout = autostop_timeout
 
-        await self.pod_update_callbacks(self.stop_callback or 0, self.reset_timeout or 0)
+        await self.pod_update_callbacks(self.stop, self.reset_timeout or 0)
+    
+    async def stop(self, stop_pod=True):
+        if self.stop_callback:
+            await self.stop_callback()
+        if self.filesync and self.filesync.task:
+            self.filesync.task.cancel()
+        
+        if stop_pod:
+            try:
+                await self.pod.stop()._timeout(5)
+            except asyncio.TimeoutError:
+                pass
+        
 
