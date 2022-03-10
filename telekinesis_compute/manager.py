@@ -189,7 +189,7 @@ class AppManager:
         return pod_wrapper.pod
 
     async def provision(self, number, pkg_dependencies, base, cpus, memory, gpu, upgrade):
-        self._logger.info('provisioning', number)
+        self._logger.info('provisioning %s pods', number)
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
         if not tag in self.ready:
             self.ready[tag] = []
