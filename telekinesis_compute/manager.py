@@ -291,8 +291,10 @@ class PodWrapper:
             self.filesync.task.cancel()
             await self.filesync.sync(False)
             shutil.rmtree(self.filesync.target_dir.rstrip('/')+'_support')
+        
         shutil.rmtree(self.bind_dir)
-        await asyncio.create_subprocess_shell(f'docker container rm {self.container_id}')
+
+        await asyncio.create_subprocess_shell(f'docker container rm -f {self.container_id}', )
 
         
         
