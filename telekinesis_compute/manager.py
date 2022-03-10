@@ -204,7 +204,7 @@ class AppManager:
     async def stop(self, account_id, pod_id, callback=None, logs=None):
         p = self.running.get(account_id, {}).pop(pod_id)
         if p and callback:
-            self.tasks['stop_callback'][time.time()] = asyncio.create_task(callback(pod_id)._execute())
+            self.tasks['stop_callback'][time.time()] = asyncio.create_task(callback(pod_id, logs=logs)._execute())
         elif callback:
             self._logger.info('pod %s: not found in manager.running', pod_id[:6])
 
@@ -273,8 +273,6 @@ class PodWrapper:
     
     async def stop(self, stop_pod=True):
         logs = await (await asyncio.create_subprocess_shell(f'docker logs {self.container_id}', stdout=asyncio.subprocess.PIPE)).stdout.read()
-        if self.stop_callback:
-            await self.stop_callback(logs=logs)
 
         if stop_pod:
             try:
@@ -285,6 +283,9 @@ class PodWrapper:
         status = await (await asyncio.create_subprocess_shell(f'docker container ls --all -f id={self.container_id} --format '+"{{.Status}}", stdout=asyncio.subprocess.PIPE)).stdout.read()
 
         logs = logs.decode() + '\n\n' + status.decode()
+
+        if self.stop_callback:
+            await self.stop_callback(logs=logs)
 
         if self.filesync and self.filesync.task:
             self.filesync.task.cancel()
