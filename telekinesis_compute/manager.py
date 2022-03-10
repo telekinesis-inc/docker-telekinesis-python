@@ -124,7 +124,7 @@ class AppManager:
         ]
 
         cmd = " ".join([
-            f"docker run -e {' -e '.join(environment)} -d --rm --network=host -v {data_path}:/usr/src/app/data/",
+            f"docker run -e {' -e '.join(environment)} -d --network=host -v {data_path}:/usr/src/app/data/",
             f"{'--gpus all --ipc=host' if gpu else ''} --cpus={cpus:.2f} --memory='{int(memory)}m'",
             f"-l telekinesis-compute {tag}"
         ])
@@ -217,7 +217,7 @@ class AppManager:
         for account_pods in self.running.values():
             for pod_wrapper in account_pods.values():
                 if pod_wrapper.container_id not in running_containers:
-                    self._logger.info('pod %s: container %s stopped', pod_wrapper[:6], pod_wrapper.container_id[:8])
+                    self._logger.info('pod %s: container %s stopped', pod_wrapper.id[:6], pod_wrapper.container_id[:8])
                     await pod_wrapper.stop(False)
     
     async def loop_check_running(self):
@@ -272,19 +272,27 @@ class PodWrapper:
         await self.pod_update_callbacks(partial(self.stop, False), self.reset_timeout or 0)
     
     async def stop(self, stop_pod=True):
+        logs = await (await asyncio.create_subprocess_shell(f'docker logs {self.container_id}', stdout=asyncio.subprocess.PIPE)).stdout.read()
         if self.stop_callback:
-            await self.stop_callback()
+            await self.stop_callback(logs=logs)
+
+        if stop_pod:
+            try:
+                await self.pod.stop()._timeout(5)
+            except asyncio.TimeoutError:
+                await asyncio.create_subprocess_shell(f'docker container stop -t 0 {self.container_id}')
+        
+        status = await (await asyncio.create_subprocess_shell(f'docker container ls --all -f id={self.container_id} --format '+"{{.Status}}", stdout=asyncio.subprocess.PIPE)).stdout.read()
+
+        logs = logs.decode() + '\n\n' + status.decode()
+
         if self.filesync and self.filesync.task:
             self.filesync.task.cancel()
             await self.filesync.sync(False)
             shutil.rmtree(self.filesync.target_dir.rstrip('/')+'_support')
         shutil.rmtree(self.bind_dir)
+        await asyncio.create_subprocess_shell(f'docker container rm {self.container_id}')
 
         
-        if stop_pod:
-            try:
-                await self.pod.stop()._timeout(5)
-            except asyncio.TimeoutError:
-                pass
         
 
