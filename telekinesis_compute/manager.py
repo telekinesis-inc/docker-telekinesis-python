@@ -137,7 +137,7 @@ class AppManager:
         update_callbacks, pod = await awaiter()
         # container = self.client.containers.get(container_id)
 
-        pod_wrapper = PodWrapper(container_id, pod, update_callbacks)
+        pod_wrapper = PodWrapper(container_id, pod, update_callbacks, data_path)
         return pod_wrapper
 
     async def clear_containers(self):
@@ -220,7 +220,7 @@ class AppManager:
                 # pass
 
 class PodWrapper:
-    def __init__(self, container_id, pod, update_callbacks):
+    def __init__(self, container_id, pod, update_callbacks, bind_dir):
         self.container_id = container_id
         self.pod_update_callbacks = update_callbacks
         self.pod = pod
@@ -230,6 +230,7 @@ class PodWrapper:
         self.autostop_time = 0
         self.autostop_task = None
         self.filesync = None
+        self.bind_dir = bind_dir
 
     def reset_timeout(self):
         print('>>>> keep alive')
@@ -266,8 +267,9 @@ class PodWrapper:
         if self.filesync and self.filesync.task:
             self.filesync.task.cancel()
             await self.filesync.sync(False)
-            shutil.rmtree(self.filesync.target_dir)
             shutil.rmtree(self.filesync.target_dir.rstrip('/')+'_support')
+        shutil.rmtree(self.bind_dir)
+
         
         if stop_pod:
             try:
