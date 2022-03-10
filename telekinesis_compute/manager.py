@@ -121,7 +121,7 @@ class AppManager:
         ]
 
         cmd = " ".join([
-            f"docker run -e {' -e '.join(environment)} -d  --network=host -v {data_path}:/usr/src/app/data/",
+            f"docker run -e {' -e '.join(environment)} -d --rm --network=host -v {data_path}:/usr/src/app/data/",
             f"{'--gpus all --ipc=host' if gpu else ''} --cpus={cpus:.2f} --memory='{int(memory)}m'",
             f"-l telekinesis-compute {tag}"
         ])
