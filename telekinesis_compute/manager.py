@@ -5,6 +5,7 @@ import json
 import asyncio
 import telekinesis as tk
 import docker
+import shutil
 from functools import partial
 
 from telekinesis_data import FileSync
@@ -264,6 +265,9 @@ class PodWrapper:
             await self.stop_callback()
         if self.filesync and self.filesync.task:
             self.filesync.task.cancel()
+            await self.filesync.sync(False)
+            shutil.rmtree(self.filesync.target_dir)
+            shutil.rmtree(self.filesync.target_dir.rstrip('/')+'_support')
         
         if stop_pod:
             try:
