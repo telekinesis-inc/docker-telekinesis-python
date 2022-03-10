@@ -201,7 +201,7 @@ class AppManager:
             await asyncio.gather(*[self.start_container(pkg_dependencies, base, cpus, memory, gpu) for _ in range(number)])
         )
 
-    async def stop(self, account_id, pod_id, callback=None):
+    async def stop(self, account_id, pod_id, callback=None, logs=None):
         p = self.running.get(account_id, {}).pop(pod_id)
         if p and callback:
             self.tasks['stop_callback'][time.time()] = asyncio.create_task(callback(pod_id)._execute())
