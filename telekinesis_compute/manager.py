@@ -6,6 +6,7 @@ import asyncio
 import telekinesis as tk
 import docker
 import shutil
+import logging
 from functools import partial
 
 from telekinesis_data import FileSync
@@ -64,6 +65,7 @@ class AppManager:
         self.client = docker.from_env()
         self.url = url or list(session.connections)[0].url
         self._session = session
+        self._logger = logging.getLogger(__name__)
         self.path = os.path.abspath(path)
         self.tasks = {'delayed_provisioning': {}, 'stop_callback': {}, 'check_running_loop': asyncio.create_task(self.loop_check_running())}
 
@@ -91,6 +93,8 @@ class AppManager:
     async def start_container(self, pkg_dependencies, base, cpus, memory, gpu):
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
 
+        client_session = tk.Session()
+        client_pubkey = client_session.session_key.public_serial()
 
         def create_callbackable():
             e = asyncio.Event()
@@ -98,15 +102,13 @@ class AppManager:
 
             async def awaiter():
                 await e.wait()
-                print('called awaiter')
+                self._logger.info('pod %s: called awaiter', client_pubkey[:6])
                 return data['data']
 
             return (awaiter, lambda *x: data.update({'data': x}) or e.set())
 
         awaiter, callback = create_callbackable()
 
-        client_session = tk.Session()
-        client_pubkey = client_session.session_key.public_serial()
         
         data_path = os.path.join(self.path, client_pubkey[:32].replace('/','-'))
         os.mkdir(data_path)
@@ -129,8 +131,15 @@ class AppManager:
 
         process = await asyncio.create_subprocess_shell(
             cmd,
-            stdout=asyncio.subprocess.PIPE
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
+
+        error = (await process.stderr.read()).decode()
+
+        if error:
+            self._logger.error('pod %s: error starting - %s', client_pubkey[:6], error)
+            raise Exception(f'error starting pod: {error}')
 
         container_id = (await process.stdout.read()).decode().replace('\n','')
 
@@ -152,7 +161,7 @@ class AppManager:
     ):
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
         if not self.ready.get(tag):
-            print('awaiting provisioning')
+            self._logger.info('awaiting provisioning')
             await self.provision(1, pkg_dependencies, base, cpus, memory, gpu, upgrade)
         pod_wrapper = self.ready[tag].pop()
 
@@ -180,7 +189,7 @@ class AppManager:
         return pod_wrapper.pod
 
     async def provision(self, number, pkg_dependencies, base, cpus, memory, gpu, upgrade):
-        print('provisioning', number)
+        self._logger.info('provisioning', number)
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
         if not tag in self.ready:
             self.ready[tag] = []
@@ -197,7 +206,7 @@ class AppManager:
         if p and callback:
             self.tasks['stop_callback'][time.time()] = asyncio.create_task(callback(pod_id)._execute())
         elif callback:
-            print(pod_id, 'not found')
+            self._logger.info('pod %s: not found in manager.running', pod_id[:6])
 
     async def check_running(self):
         running_containers = (await (await asyncio.create_subprocess_shell(
@@ -208,7 +217,7 @@ class AppManager:
         for account_pods in self.running.values():
             for pod_wrapper in account_pods.values():
                 if pod_wrapper.container_id not in running_containers:
-                    print('container stopped', pod_wrapper.container_id)
+                    self._logger.info('pod %s: container %s stopped', pod_wrapper[:6], pod_wrapper.container_id[:8])
                     await pod_wrapper.stop(False)
     
     async def loop_check_running(self):
@@ -221,6 +230,7 @@ class AppManager:
 
 class PodWrapper:
     def __init__(self, container_id, pod, update_callbacks, bind_dir):
+        self._logger = logging.getLogger(__name__)
         self.container_id = container_id
         self.pod_update_callbacks = update_callbacks
         self.pod = pod
@@ -233,7 +243,7 @@ class PodWrapper:
         self.bind_dir = bind_dir
 
     def reset_timeout(self):
-        print('>>>> keep alive')
+        self._logger.info('pod %s: keep alive', self.id[:6])
         if self.autostop_timeout is not None:
             self.autostop_time = time.time() + self.autostop_timeout
             if self.autostop_task is None:
@@ -249,10 +259,10 @@ class PodWrapper:
             if cpu_utilization < 1: # 1%
                 await self.stop()
             else:
-                print('extending cpu_utilization', cpu_utilization)
+                self._logger.info('pod %s: extending because of cpu_utilization %s', self.id[:6], cpu_utilization)
                 self.autostop_task = asyncio.create_task(self.autostop(max(2, self.autostop_timeout)))
         else:
-            print('extending', self.autostop_time - time.time())
+            # print('extending', self.autostop_time - time.time())
             self.autostop_task = asyncio.create_task(self.autostop(max(2, self.autostop_time-time.time())))
          
     async def update_params(self, stop_callback, autostop_timeout):
