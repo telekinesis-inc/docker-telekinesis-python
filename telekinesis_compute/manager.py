@@ -152,6 +152,9 @@ class AppManager:
     async def clear_containers(self):
         [c.stop(timeout=0) for c in self.client.containers.list(all=True, filters={'label': 'telekinesis-compute'})]
         [c.remove() for c in self.client.containers.list(all=True, filters={'label': 'telekinesis-compute'})]
+        
+        shutil.rmtree(self.path, True)
+        os.mkdir(self.path)
 
         return self.client.images.prune()
 
