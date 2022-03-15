@@ -5,7 +5,6 @@ import json
 import asyncio
 import telekinesis as tk
 import docker
-import shutil
 import logging
 from functools import partial
 
@@ -59,11 +58,12 @@ def prepare_js_files(path, dependencies):
         file_out.write(script)
 
 class AppManager:
-    def __init__(self, session, path, url=None):
+    def __init__(self, session, path, sudo_rm=False):
         self.running = {}
         self.ready = {}
         self.client = docker.from_env()
-        self.url = url or list(session.connections)[0].url
+        self.url = list(session.connections)[0].url
+        self._sudo = sudo_rm
         self._session = session
         self._logger = logging.getLogger(__name__)
         self.path = os.path.abspath(path)
@@ -146,15 +146,23 @@ class AppManager:
         update_callbacks, pod = await awaiter()
         # container = self.client.containers.get(container_id)
 
-        pod_wrapper = PodWrapper(container_id, pod, update_callbacks, data_path)
+        pod_wrapper = PodWrapper(container_id, pod, update_callbacks, data_path, self._sudo)
         return pod_wrapper
 
-    async def clear_containers(self):
+    async def clear_containers(self, clear_path=False):
         [c.stop(timeout=0) for c in self.client.containers.list(all=True, filters={'label': 'telekinesis-compute'})]
         [c.remove() for c in self.client.containers.list(all=True, filters={'label': 'telekinesis-compute'})]
         
-        shutil.rmtree(self.path, True)
-        os.mkdir(self.path)
+        if clear_path:
+            proc = await asyncio.create_subprocess_shell(
+                f'{"sudo " if self._sudo else ""}rm -rf {self.path}', 
+                stderr=asyncio.subprocess.PIPE, 
+                stdout=asyncio.subprocess.PIPE)
+            await proc.stderr.read()
+            await proc.stdout.read()
+
+        if not os.path.exists(self.path):
+            os.mkdir(self.path)
 
         return self.client.images.prune()
 
@@ -232,8 +240,9 @@ class AppManager:
                 # pass
 
 class PodWrapper:
-    def __init__(self, container_id, pod, update_callbacks, bind_dir):
+    def __init__(self, container_id, pod, update_callbacks, bind_dir, sudo_rm=False):
         self._logger = logging.getLogger(__name__)
+        self._sudo = sudo_rm
         self.container_id = container_id
         self.pod_update_callbacks = update_callbacks
         self.pod = pod
@@ -283,7 +292,9 @@ class PodWrapper:
             except asyncio.TimeoutError:
                 await asyncio.create_subprocess_shell(f'docker container stop -t 0 {self.container_id}')
         
-        status = await (await asyncio.create_subprocess_shell(f'docker container ls --all -f id={self.container_id} --format '+"{{.Status}}", stdout=asyncio.subprocess.PIPE)).stdout.read()
+        status = await (await asyncio.create_subprocess_shell(
+            f'docker container ls --all -f id={self.container_id} --format '+"{{.Status}}", 
+            tdout=asyncio.subprocess.PIPE)).stdout.read()
 
         logs = logs.decode() + '\n\n' + status.decode()
 
@@ -293,9 +304,19 @@ class PodWrapper:
         if self.filesync and self.filesync.task:
             self.filesync.task.cancel()
             await self.filesync.sync(False)
-            shutil.rmtree(self.filesync.target_dir.rstrip('/')+'_support')
+            proc = await asyncio.create_subprocess_shell(
+                f'{"sudo " if self._sudo else ""}rm -rf {self.filesync.target_dir.rstrip("/")}_support', 
+                stderr=asyncio.subprocess.PIPE, 
+                stdout=asyncio.subprocess.PIPE)
+            await proc.stderr.read()
+            await proc.stdout.read()
         
-        shutil.rmtree(self.bind_dir)
+        proc = await asyncio.create_subprocess_shell(
+            f'{"sudo " if self._sudo else ""}rm -rf {self.bind_dir}', 
+            stderr=asyncio.subprocess.PIPE, 
+            stdout=asyncio.subprocess.PIPE)
+        await proc.stderr.read()
+        await proc.stdout.read()
 
         await asyncio.create_subprocess_shell(f'docker container rm -f {self.container_id}', )
 
