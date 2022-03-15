@@ -3,11 +3,60 @@ import asyncio
 import os
 import signal
 import json
+import re
 from contextlib import redirect_stdout, redirect_stderr
 from collections import deque
 import threading
 
 import telekinesis as tk
+
+
+def _extract_line_blocks(s, _t=None):
+    start = False
+    if not s:
+        if _t is None:
+            return [["", False]]
+        raise SyntaxError('EOL while scanning string literal')
+    if s[0] in ['"', "'"]:
+        if _t == s[0]: # close string
+            return [_t, True], *_extract_line_blocks(s[1:])
+        elif _t is None:
+            _t = s[0]
+            start = True
+    
+    [ss, _], *tail = _extract_line_blocks(s[1:], _t)
+    out = [s[0]+ss, _t is not None], *tail
+    if start:
+        return ["", True], *out
+    return out
+
+
+def _preprocess_code(code, mappings):
+    blocks = []
+    for i, block in enumerate(code.split('"""')):
+        if i%2 == 0:
+            lines = []
+            for line in block.split('\n'):
+                line_blocks = _extract_line_blocks(line)
+                for lb in line_blocks:
+                    if not lb[1]: # not string literal
+                        x, *comment = lb[0].split('#')
+                        print(x, comment)
+                        for token, mapping in mappings.items():
+                            if re.match(f'^\s*{token}\s*(?=[^= ])', lb[0]):
+                                x = re.sub(f'^\s*{token}\s*(?=[^= ])','await '+mapping[0], x) + mapping[1]
+                            if re.match(f'.*{token}\s*(?=[^= ])', x):
+                                
+                                x = re.sub(f'{token}\s*(?=[^= ])',
+                                               'await '+mapping[0], x) + mapping[2]
+                        lb[0] = '#'.join([x, *comment])
+                        if comment:
+                            break
+                lines.append(''.join(lb[0] for lb in line_blocks))
+            blocks.append('\n'.join(lines))
+        else:
+            blocks.append(block)
+    return '"""'.join(blocks)
 
 
 class StdOutCapture:
@@ -31,6 +80,38 @@ class StdOutCapture:
             asyncio.create_task(self.callback(*self.acc))
         self.acc.clear()
 
+class Context:
+    def __init__(self, stop):
+        self.stop = stop
+
+    async def exec_command(self, cmd, stream_print=False):
+        async def _read_stream(stream, cb):  
+            while True:
+                line = await stream.readline()
+                if line:
+                    cb(line.decode().rstrip('\n'))
+                else:
+                    break
+
+        async def _stream_subprocess(cmd, stdout_cb, stderr_cb):  
+            process = await asyncio.create_subprocess_shell(cmd,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+
+            await asyncio.wait([
+                asyncio.create_task(_read_stream(process.stdout, stdout_cb)),
+                asyncio.create_task(_read_stream(process.stderr, stderr_cb))
+            ])
+            return await process.wait()
+        
+        if stream_print:
+            await _stream_subprocess(cmd, print, lambda *x: print(*x, file=sys.stderr))
+        else:
+            process = await asyncio.create_subprocess_shell(cmd,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+            return (await process.stdout.read()).decode().split('\n')
+
+
+
 
 class Pod:
     def __init__(self, name, executor, lock):
@@ -42,21 +123,27 @@ class Pod:
         self._stop_callback = None
         self._keep_alive_callback = None
 
-    async def execute(self, code, inputs=None, scope=None, print_callback=None):
+    async def execute(self, code, inputs=None, scope=None, print_callback=None, inject_context=False):
         lock = asyncio.Event()
 
         inputs = inputs or {}
         if scope:
             inputs.update({k: v for k, v in self.scopes.get(scope, {}).items() if k not in inputs.keys()})
-        async def st():
+        if inject_context and '_tkc_context' not in inputs:
+            inputs['_tkc_context'] = Context(self.stop)
+        if inject_context:
+            code = _preprocess_code(code, {'!': ('_tkc_context.exec_command("', '", stream_print=True)', '")'), '$': ('_tkc_context', '', '')})
+            print('>>>', code)
+
+        async def lock_set():
             lock.set()
 
-        async def pcb(*args):
+        async def print_cb(*args):
             self.log.append(args)
             if print_callback:
                 await print_callback(*args)
 
-        job = Job(code, inputs, pcb, st, asyncio.get_event_loop())
+        job = Job(code, inputs, print_cb, lock_set, asyncio.get_event_loop())
         self._executor.enqueue(job)
         await lock.wait()
         t, new_vars = job.returns
@@ -81,13 +168,12 @@ class Pod:
         if self._executor.call_lock.isSet():
             os.kill(os.getpid(), signal.SIGINT)
 
-    async def install_package(self, package_name):
-        process = await asyncio.create_subprocess_shell(
-            'pip install '+ package_name,
-            stderr=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE)
 
-        return (await process.stderr.read(), await process.stdout.read())
+    async def exec_command(self, command, print_callback=None):
+        return await self.execute('!'+command, print_callback=print_callback, inject_context=True)
+
+    async def install_package(self, package_name, print_callback=None):
+        return await self.exec_command('pip install -q'+ package_name, print_callback)
 
     def _update_callbacks(self, stop_callback, keep_alive_callback):
         self._stop_callback = stop_callback
@@ -207,7 +293,7 @@ async def start_pod(executor, url, pod_name, private_key_str=None, key_password=
         await tk.Telekinesis(route, entrypoint._session)(pod._update_callbacks, pod)
         entrypoint._session.message_listener = pod._keep_alive
     else:
-        await tk.authenticate(url, private_key).data.set(pod_name, pod)
+        await tk.authenticate(url, private_key).data.put(pod, pod_name)
     
     await lock.wait()
 
