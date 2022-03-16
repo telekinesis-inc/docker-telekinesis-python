@@ -296,7 +296,7 @@ class PodWrapper:
         
         status = await (await asyncio.create_subprocess_shell(
             f'docker container ls --all -f id={self.container_id} --format '+"{{.Status}}", 
-            tdout=asyncio.subprocess.PIPE)).stdout.read()
+            stdout=asyncio.subprocess.PIPE)).stdout.read()
 
         logs = logs.decode() + '\n\n' + status.decode()
 
