@@ -183,9 +183,11 @@ class AppManager:
         pod_wrapper.reset_timeout()
         
         if bind_data:
-            data_path = os.path.join(self.path, pod_wrapper.id[:32].replace('/','-'))
-            support_path = data_path +'_support'
+            bind_path = os.path.join(self.path, pod_wrapper.id[:32].replace('/','-'))
+            data_path = os.path.join(bind_data, 'synced')
+            support_path = bind_path +'_support'
             os.mkdir(support_path)
+            os.mkdir(data_path)
 
             pod_wrapper.filesync = FileSync(bind_data, data_path, support_path)
 
