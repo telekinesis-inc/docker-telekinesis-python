@@ -24,7 +24,7 @@ def prepare_python_files(path, dependencies):
     script = '\n'.join([
         'import sys',
         *[
-            f'try: import {d.replace("-", "_")}\nexcept Exception e: print(e, file=sys.stderr)'
+            f'try: import {d.replace("-", "_")}\nexcept Exception as e: print(e, file=sys.stderr)'
             for d in deps_import_names
         ],
         scriptbase
@@ -48,7 +48,7 @@ def prepare_pytorch_files(path, dependencies):
     script = '\n'.join([
         'import sys',
         *[
-            f'try: import {d.replace("-", "_")}\nexcept Exception e: print(e, file=sys.stderr)'
+            f'try: import {d.replace("-", "_")}\nexcept Exception as e: print(e, file=sys.stderr)'
             for d in deps_import_names
         ],
         scriptbase
