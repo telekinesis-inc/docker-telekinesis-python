@@ -307,7 +307,7 @@ class PodWrapper:
             self.filesync.task.cancel()
             await self.filesync.sync(False)
             proc = await asyncio.create_subprocess_shell(
-                f'{"sudo " if self._sudo else ""}rm -rf {self.filesync.target_dir.rstrip("/")}_support', 
+                f'{"sudo " if self._sudo else ""}rm -rf {self.filesync.support_dir}',
                 stderr=asyncio.subprocess.PIPE, 
                 stdout=asyncio.subprocess.PIPE)
             await proc.stderr.read()
@@ -323,5 +323,3 @@ class PodWrapper:
         await asyncio.create_subprocess_shell(f'docker container rm -f {self.container_id}', )
 
         
-        
-
