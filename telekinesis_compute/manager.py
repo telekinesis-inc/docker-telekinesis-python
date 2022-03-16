@@ -184,7 +184,7 @@ class AppManager:
         
         if bind_data:
             bind_path = os.path.join(self.path, pod_wrapper.id[:32].replace('/','-'))
-            data_path = os.path.join(bind_data, 'synced')
+            data_path = os.path.join(bind_path, 'synced')
             support_path = bind_path +'_support'
             os.mkdir(support_path)
             os.mkdir(data_path)
