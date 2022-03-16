@@ -21,7 +21,14 @@ def prepare_python_files(path, dependencies):
         file_out.write(dockerfile)
 
     scriptbase = importlib.resources.read_text(__package__, "script_base.py")
-    script = '\n'.join(['import '+ d.replace('-', '_') for d in deps_import_names] + [scriptbase])
+    script = '\n'.join([
+        'import sys',
+        *[
+            f'try: import {d.replace("-", "_")}\nexcept Exception e: print(e, file=sys.stderr)'
+            for d in deps_import_names
+        ],
+        scriptbase
+    ])
 
 
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
@@ -30,7 +37,7 @@ def prepare_python_files(path, dependencies):
 def prepare_pytorch_files(path, dependencies):
     dockerbase = importlib.resources.read_text(__package__, f"Dockerfile_pytorch")
     deps_pip_names = [d if isinstance(d, str) else d[0] for d in dependencies]
-    deps_import_names = [d if isinstance(d, str) else d[1] for d in dependencies]
+    deps_import_names = [d if isinstance(d, str) else d[1] for d in dependencies] + ['torch']
 
     dockerfile = dockerbase.replace('{{PKG_DEPENDENCIES}}', '\n'.join('RUN pip install '+ d for d in deps_pip_names))
 
@@ -38,8 +45,14 @@ def prepare_pytorch_files(path, dependencies):
         file_out.write(dockerfile)
 
     scriptbase = importlib.resources.read_text(__package__, "script_base.py")
-    script = '\n'.join(['import '+ d.replace('-', '_') for d in set(deps_import_names).union(['torch'])] + [scriptbase])
-
+    script = '\n'.join([
+        'import sys',
+        *[
+            f'try: import {d.replace("-", "_")}\nexcept Exception e: print(e, file=sys.stderr)'
+            for d in deps_import_names
+        ],
+        scriptbase
+    ])
 
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
         file_out.write(script)
