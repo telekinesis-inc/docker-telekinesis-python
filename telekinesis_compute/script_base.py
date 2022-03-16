@@ -111,8 +111,6 @@ class Context:
             return (await process.stdout.read()).decode().split('\n')
 
 
-
-
 class Pod:
     def __init__(self, name, executor, lock):
         self.name = name
@@ -132,8 +130,10 @@ class Pod:
         if inject_context and '_tkc_context' not in inputs:
             inputs['_tkc_context'] = Context(self.stop)
         if inject_context:
-            code = _preprocess_code(code, {'!': ('_tkc_context.exec_command("', '", stream_print=True)', '")'), '$': ('_tkc_context', '', '')})
-            print('>>>', code)
+            code = _preprocess_code(code, {
+                '!': ('_tkc_context.exec_command("', '", stream_print=True)', '")'), 
+                '$': ('_tkc_context', '', '')
+            })
 
         async def lock_set():
             lock.set()
@@ -169,11 +169,11 @@ class Pod:
             os.kill(os.getpid(), signal.SIGINT)
 
 
-    async def exec_command(self, command, print_callback=None):
+    async def _exec_command(self, command, print_callback=None):
         return await self.execute('!'+command, print_callback=print_callback, inject_context=True)
 
     async def install_package(self, package_name, print_callback=None):
-        return await self.exec_command('pip install -q'+ package_name, print_callback)
+        return await self._exec_command('pip install -q '+ package_name, print_callback)
 
     def _update_callbacks(self, stop_callback, keep_alive_callback):
         self._stop_callback = stop_callback
