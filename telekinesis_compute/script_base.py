@@ -44,12 +44,12 @@ def _preprocess_code(code, mappings):
                         x, *comment = lb[0].split('#')
                         # print(x, comment)
                         for token, mapping in mappings.items():
-                            if not ending and re.match(f'^\s*{token}\s*(?=[^= ])', lb[0]):
-                                x = re.sub(f'^\s*{token}\s*(?=[^= ])','await '+mapping[0], x)
+                            if not ending and re.match(f'^\s*\{token}\s*(?=[^= ])', lb[0]):
+                                x = re.sub(f'^\s*\{token}\s*(?=[^= ])','await '+mapping[0], x)
                                 ending = mapping[1]
-                            if not ending and re.match(f'.*{token}\s*(?=[^= ])', x):
+                            if not ending and re.match(f'.*\{token}\s*(?=[^= ])', x):
                                 
-                                x = re.sub(f'{token}\s*(?=[^= ])',
+                                x = re.sub(f'\{token}\s*(?=[^= ])',
                                                'await '+mapping[0], x)
                                 ending = mapping[2]
                         if comment:
