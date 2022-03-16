@@ -175,7 +175,7 @@ class Pod:
 
     def interrupt(self):
         self._executor.queue.clear()
-        if self._executor.call_lock.isSet():
+        if self._executor.call_lock.is_set():
             os.kill(os.getpid(), signal.SIGINT)
 
 
