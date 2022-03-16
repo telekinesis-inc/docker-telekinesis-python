@@ -91,8 +91,10 @@ class StdOutCapture:
 
 
 class Context:
-    def __init__(self, stop):
-        self.stop = stop
+    def __init__(self, stop, loop):
+        async def _stop():
+            asyncio.run_coroutine_threadsafe(stop(), loop)
+        self.stop = _stop
 
     async def exec_command(self, cmd, stream_print=False):
         async def _read_stream(stream, cb):  
@@ -138,7 +140,7 @@ class Pod:
         if scope:
             inputs.update({k: v for k, v in self.scopes.get(scope, {}).items() if k not in inputs.keys()})
         if inject_context and '_tkc_context' not in inputs:
-            inputs['_tkc_context'] = Context(self.stop)
+            inputs['_tkc_context'] = Context(self.stop, asyncio.get_event_loop())
         if inject_context:
             code = _preprocess_code(code, {
                 '!': ('_tkc_context.exec_command("', '", stream_print=True)', '")'), 
@@ -167,11 +169,13 @@ class Pod:
             raise new_vars
 
     async def stop(self):
-        self._executor.stop_lock.set()
-        self.interrupt()
-        if self._stop_callback:
-            await self._stop_callback()
-        self._lock.set()
+        async def cleanup():
+            self._executor.stop_lock.set()
+            if self._stop_callback:
+                await self._stop_callback()
+            self._lock.set()
+            self.interrupt()
+        asyncio.create_task(cleanup())
 
     def interrupt(self):
         self._executor.queue.clear()
