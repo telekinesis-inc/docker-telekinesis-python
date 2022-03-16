@@ -1,12 +1,18 @@
 FROM node:17-buster-slim
 
-WORKDIR /usr/src/app
+RUN useradd --create-home user
+USER user
+RUN mkdir /home/user/data
+RUN mkdir /home/user/src
 
+WORKDIR /home/user/src
+
+RUN npm install npm@8.5.4
 RUN npm install telekinesis-js ws
-{{PKG_DEPENDENCIES}}
-
 COPY script.js .
 
-WORKDIR /usr/src/app/data
+{{PKG_DEPENDENCIES}}
 
-ENTRYPOINT ["node", "../script.js"]
+WORKDIR /home/user/data
+
+ENTRYPOINT ["node", "../src/script.js"]

@@ -38,21 +38,30 @@ def _preprocess_code(code, mappings):
             lines = []
             for line in block.split('\n'):
                 line_blocks = _extract_line_blocks(line)
+                ending = ''
                 for lb in line_blocks:
                     if not lb[1]: # not string literal
                         x, *comment = lb[0].split('#')
-                        print(x, comment)
+                        # print(x, comment)
                         for token, mapping in mappings.items():
-                            if re.match(f'^\s*{token}\s*(?=[^= ])', lb[0]):
-                                x = re.sub(f'^\s*{token}\s*(?=[^= ])','await '+mapping[0], x) + mapping[1]
-                            if re.match(f'.*{token}\s*(?=[^= ])', x):
+                            if not ending and re.match(f'^\s*{token}\s*(?=[^= ])', lb[0]):
+                                x = re.sub(f'^\s*{token}\s*(?=[^= ])','await '+mapping[0], x)
+                                ending = mapping[1]
+                            if not ending and re.match(f'.*{token}\s*(?=[^= ])', x):
                                 
                                 x = re.sub(f'{token}\s*(?=[^= ])',
-                                               'await '+mapping[0], x) + mapping[2]
-                        lb[0] = '#'.join([x, *comment])
+                                               'await '+mapping[0], x)
+                                ending = mapping[2]
                         if comment:
+                            lb[0] = '#'.join([x, ending, *comment])
+                            ending = ''
                             break
-                lines.append(''.join(lb[0] for lb in line_blocks))
+                        else:
+                            lb[0] = x
+                    elif ending:
+                        lb[0] = '\\' + lb[0][:-1] + '\\' + lb[0][-1]
+
+                lines.append(''.join([*[lb[0] for lb in line_blocks], ending]))
             blocks.append('\n'.join(lines))
         else:
             blocks.append(block)
@@ -79,6 +88,7 @@ class StdOutCapture:
         else:
             asyncio.create_task(self.callback(*self.acc))
         self.acc.clear()
+
 
 class Context:
     def __init__(self, stop):
@@ -173,7 +183,7 @@ class Pod:
         return await self.execute('!'+command, print_callback=print_callback, inject_context=True)
 
     async def install_package(self, package_name, print_callback=None):
-        return await self._exec_command('pip install -q '+ package_name, print_callback)
+        return await self._exec_command('pip install '+ package_name, print_callback)
 
     def _update_callbacks(self, stop_callback, keep_alive_callback):
         self._stop_callback = stop_callback

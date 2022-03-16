@@ -114,7 +114,7 @@ const main = (kwargs) => new Promise(resolve => {
     entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)((scb, kacb) => pod._updateCallbacks(scb, kacb), pod));
     entrypoint._session.messageListener = md => pod._keepAlive(md);
   } else {
-    tk.authenticate(kwargs.url, privateKey).data.set(kwargs.pod_name, pod).then(() => console.error('>> Pod is running'));
+    tk.authenticate(kwargs.url, privateKey).data.put(pod, kwargs.pod_name).then(() => console.error('>> Pod is running'));
   }
 });
 main(decodeArgs()).then(() => {throw new Error('Exiting');})
