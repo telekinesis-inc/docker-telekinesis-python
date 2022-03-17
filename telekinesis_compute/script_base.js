@@ -22,7 +22,7 @@ class Pod {
     this._stopCallback = undefined;
     this._keepAliveCallback = undefined
   }
-  async execute(code, inputs, scope, logCallback) {
+  async execute(code, inputs, outputs, scope, logCallback) {
     inputs = inputs || {};
     inputs.require = require;
     inputs.console = new ConsoleCapture(async (...args) => {
@@ -42,7 +42,15 @@ class Pod {
       this.scopes[scope] = {...this.scopes[scope], ...out};
     }
 
-    return out;
+    if (outputs) {
+      if (!(outputs instanceof Array)) {
+        return out[outputs];
+      } 
+      return Object.entries(out).filter(([k, _]) => outputs.includes(k)).reduce((p, v) => {p[v[0]] = v[1]; return p}, {});
+    }
+    if (scope === undefined) {
+      return out;
+    }
   }
   async stop() {
     if (this._stopCallback) {

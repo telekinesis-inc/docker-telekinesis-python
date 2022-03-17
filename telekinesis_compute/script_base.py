@@ -133,7 +133,7 @@ class Pod:
         self._stop_callback = None
         self._keep_alive_callback = None
 
-    async def execute(self, code, inputs=None, scope=None, print_callback=None, inject_context=False):
+    async def execute(self, code, inputs=None, outputs=None, scope=None, print_callback=None, inject_context=False):
         lock = asyncio.Event()
 
         inputs = inputs or {}
@@ -164,7 +164,12 @@ class Pod:
                 if not scope in self.scopes:
                     self.scopes[scope] = {}
                 self.scopes[scope].update(new_vars)
-            return new_vars
+            if outputs:
+                if isinstance(outputs, str):
+                    return new_vars.get(outputs)
+                return {k: v for k, v in new_vars if k in outputs}
+            if scope is None:
+                return new_vars
         else:
             raise new_vars
 
@@ -181,7 +186,6 @@ class Pod:
         self._executor.queue.clear()
         if self._executor.call_lock.is_set():
             os.kill(os.getpid(), signal.SIGINT)
-
 
     async def _exec_command(self, command, print_callback=None):
         return await self.execute('!'+command, print_callback=print_callback, inject_context=True)
