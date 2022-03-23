@@ -323,9 +323,9 @@ def run_in_new_event_loop(future):
     l.run_until_complete(future)
 
 
-executor = Executor()
+if __name__ == '__main__':
+    executor = Executor()
 
-threading.Thread(target=run_in_new_event_loop, args=[start_pod(executor, **decode_args())]).start()
+    threading.Thread(target=run_in_new_event_loop, args=[start_pod(executor, **decode_args())]).start()
 
-asyncio.run(executor.run())
-
+    asyncio.run(executor.run())
