@@ -181,7 +181,7 @@ class AppManager:
 
     async def get_pod(
         self, pkg_dependencies, account_id, base='python', cpus=1.0, memory=2000, gpu=False, autostop_timeout=None, bind_data=None, stop_callback=None, 
-        provision=False, upgrade=False
+        provision=False, runner=None, upgrade=False
     ):
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
         if not self.ready.get((tag, int(cpus*1000), int(memory))):
@@ -192,7 +192,7 @@ class AppManager:
         self.running[account_id] = {**self.running.get(account_id, {}), pod_wrapper.id: pod_wrapper}
 
         # if stop_callback or autostop_timeout is not None:
-        await pod_wrapper.update_params(partial(self.stop, account_id, pod_wrapper.id, stop_callback), autostop_timeout)
+        await pod_wrapper.update_params(partial(self.stop, account_id, pod_wrapper.id, stop_callback), autostop_timeout, runner)
         pod_wrapper.reset_timeout()
         
         if bind_data:
@@ -263,6 +263,7 @@ class PodWrapper:
         self.pod = pod
         self.id = pod._target.session[0]
         self.stop_callback = None
+        self.runner = None
         self.autostop_timeout = None
         self.autostop_time = 0
         self.autostop_task = None
@@ -292,11 +293,11 @@ class PodWrapper:
             # print('extending', self.autostop_time - time.time())
             self.autostop_task = asyncio.create_task(self.autostop(max(2, self.autostop_time-time.time())))
          
-    async def update_params(self, stop_callback, autostop_timeout):
+    async def update_params(self, stop_callback, autostop_timeout, runner):
         self.stop_callback = stop_callback
         self.autostop_timeout = autostop_timeout
 
-        await self.pod_update_callbacks(partial(self.stop, False), self.reset_timeout or 0)
+        await self.pod_update_callbacks(partial(self.stop, False), self.reset_timeout or 0, runner or 0)
     
     async def stop(self, stop_pod=True):
         logs = await (await asyncio.create_subprocess_shell(f'docker logs {self.container_id}', stdout=asyncio.subprocess.PIPE)).stdout.read()

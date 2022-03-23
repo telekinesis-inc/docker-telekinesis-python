@@ -91,10 +91,11 @@ class StdOutCapture:
 
 
 class Context:
-    def __init__(self, stop, loop):
+    def __init__(self, stop, loop, runner):
         async def _stop():
             asyncio.run_coroutine_threadsafe(stop(), loop)
         self.stop = _stop
+        self._runner = runner
 
     async def exec_command(self, cmd, stream_print=False):
         async def _read_stream(stream, cb):  
@@ -122,6 +123,8 @@ class Context:
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
             return (await process.stdout.read()).decode().split('\n')
 
+    async def __call__(self, *args, **kwargs):
+        return await self._runner(*args, **kwargs)
 
 class Pod:
     def __init__(self, name, executor, lock):
@@ -132,6 +135,7 @@ class Pod:
         self._lock = lock
         self._stop_callback = None
         self._keep_alive_callback = None
+        self._runner = None
 
     async def execute(self, code, inputs=None, outputs=None, scope=None, print_callback=None, inject_context=False):
         lock = asyncio.Event()
@@ -140,7 +144,7 @@ class Pod:
         if scope:
             inputs.update({k: v for k, v in self.scopes.get(scope, {}).items() if k not in inputs.keys()})
         if inject_context and '_tkc_context' not in inputs:
-            inputs['_tkc_context'] = Context(self.stop, asyncio.get_event_loop())
+            inputs['_tkc_context'] = Context(self.stop, asyncio.get_event_loop(), self._runner)
         if inject_context:
             code = _preprocess_code(code, {
                 '!': ('_tkc_context.exec_command("', '", stream_print=True)', '")'), 
@@ -193,9 +197,10 @@ class Pod:
     async def install_package(self, package_name, print_callback=None):
         return await self._exec_command('pip install '+ package_name, print_callback)
 
-    def _update_callbacks(self, stop_callback, keep_alive_callback):
+    def _update_callbacks(self, stop_callback, keep_alive_callback, runner):
         self._stop_callback = stop_callback
         self._keep_alive_callback = keep_alive_callback
+        self._runner = runner
 
     def _keep_alive(self, metadata):
         if self._keep_alive_callback and metadata.caller.session[0] != self._keep_alive_callback._target.session[0]:
