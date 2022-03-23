@@ -184,10 +184,10 @@ class AppManager:
         provision=False, upgrade=False
     ):
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
-        if not self.ready.get(tag):
+        if not self.ready.get((tag, int(cpus*1000), int(memory))):
             self._logger.info('awaiting provisioning')
             await self.provision(1, pkg_dependencies, base, cpus, memory, gpu, upgrade)
-        pod_wrapper = self.ready[tag].pop()
+        pod_wrapper = self.ready[(tag, int(cpus*1000), int(memory))].pop()
 
         self.running[account_id] = {**self.running.get(account_id, {}), pod_wrapper.id: pod_wrapper}
 
@@ -217,13 +217,13 @@ class AppManager:
     async def provision(self, number, pkg_dependencies, base, cpus, memory, gpu, upgrade):
         self._logger.info('provisioning %s pods', number)
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
-        if not tag in self.ready:
-            self.ready[tag] = []
+        if not (tag, int(cpus*1000), int(memory)) in self.ready:
+            self.ready[(tag, int(cpus*1000), int(memory))] = []
 
         if upgrade or not self.client.images.list(name=tag):
             await self.build_image(pkg_dependencies, base)
 
-        self.ready[tag].extend(
+        self.ready[(tag, int(cpus*1000), int(memory))].extend(
             await asyncio.gather(*[self.start_container(pkg_dependencies, base, cpus, memory, gpu) for _ in range(number)])
         )
 
