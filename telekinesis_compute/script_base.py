@@ -144,7 +144,7 @@ class Pod:
         if scope:
             inputs.update({k: v for k, v in self.scopes.get(scope, {}).items() if k not in inputs.keys()})
         if inject_context and '_tkc_context' not in inputs:
-            inputs['_tkc_context'] = Context(self.stop, asyncio.get_event_loop(), self._runner)
+            inputs['_tkc_context'] = tk.Telekinesis(Context(self.stop, asyncio.get_event_loop(), self._runner), tk.Session())
         if inject_context:
             code = _preprocess_code(code, {
                 '!': ('_tkc_context.exec_command("', '", stream_print=True)', '")'), 
