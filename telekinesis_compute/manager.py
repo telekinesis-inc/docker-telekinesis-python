@@ -208,7 +208,7 @@ class AppManager:
             t = time.time()
             async def delayed_provisioning(t):
                 await asyncio.sleep(1)
-                await self.provision(1, base, pkg_dependencies, base, cpus, memory, gpu, upgrade)
+                await self.provision(1, pkg_dependencies, base, cpus, memory, gpu, upgrade)
                 self.tasks['delayed_provisioning'].pop(t)
             self.tasks['delayed_provisioning'][t] = asyncio.create_task(delayed_provisioning(t))
 
