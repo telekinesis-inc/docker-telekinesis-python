@@ -228,7 +228,7 @@ class AppManager:
         )
 
     async def stop(self, account_id, pod_id, callback=None, logs=None):
-        p = self.running.get(account_id, {}).pop(pod_id)
+        p = self.running.get(account_id, {}).pop(pod_id, None)
         if p and callback:
             self.tasks['stop_callback'][time.time()] = asyncio.create_task(callback(pod_id, logs=logs)._execute())
         elif callback:
