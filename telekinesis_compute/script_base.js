@@ -6,10 +6,10 @@ class ConsoleCapture {
     this.callback = callback
   }
   async log() {
-    await this.callback(arguments);
+    await this.callback(arguments).catch(() => null);
   }
   async error() {
-    await this.callback(arguments);
+    await this.callback(arguments).catch(() => null);
   }
 }
 
@@ -58,7 +58,7 @@ class Pod {
   }
   async stop() {
     if (this._stopCallback) {
-      await this._stopCallback();
+      await this._stopCallback().catch(() => null);
     }
     this._resolve()
   }
@@ -129,7 +129,7 @@ const main = (kwargs) => new Promise(resolve => {
     let entrypoint = new tk.Entrypoint(kwargs.url, privateKey);
     let route = tk.Route.fromObject(JSON.parse(kwargs.route_str));
     // entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)(console.error || 0, pod));
-    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)((scb, kacb) => pod._updateCallbacks(scb, kacb), pod));
+    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)((scb, kacb, runner) => pod._updateCallbacks(scb, kacb, runner), pod));
     entrypoint._session.messageListener = md => pod._keepAlive(md);
   } else {
     tk.authenticate(kwargs.url, privateKey).data.put(pod, kwargs.pod_name).then(() => console.error('>> Pod is running'));
