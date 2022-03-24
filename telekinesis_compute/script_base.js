@@ -21,18 +21,22 @@ class Pod {
     this._resolve = resolve;
     this._stopCallback = undefined;
     this._keepAliveCallback = undefined
+    this._runner = undefined;
   }
-  async execute(code, inputs, outputs, scope, logCallback) {
+  async execute(code, inputs, outputs, scope, print_callback, inject_context) {
     inputs = inputs || {};
     inputs.require = require;
     inputs.console = new ConsoleCapture(async (...args) => {
       this.log.push(args);
-      if (logCallback) {
-        await logCallback(...args);
+      if (print_callback) {
+        await print_callback(...args);
       }
     })
     if (scope && this.scopes[scope]) {
       inputs = {...this.scopes[scope], ...inputs}
+    }
+    if (inject_context) {
+      inputs._tkcContext = contextFactory(this._stopCallback, this._runner)
     }
     let context = vm.createContext(inputs);
     const content = '(async () => {\n' +code+"\n})";
@@ -58,15 +62,21 @@ class Pod {
     }
     this._resolve()
   }
-  _updateCallbacks(stopCallback, keepAliveCallback) {
+  _updateCallbacks(stopCallback, keepAliveCallback, runner) {
     this._stopCallback = stopCallback;
     this._keepAliveCallback = keepAliveCallback;
+    this._runner = runner;
   }
   _keepAlive(metadata) {
     if (this._keepAliveCallback && metadata?.caller.session[0] != this._keepAliveCallback._target.session[0]) {
       this._keepAliveCallback().then(() => null)
     }
   }
+}
+
+const contextFactory = (stopper, runner) => {
+  const context = async (...args) => await runner(...args);
+  context.stop = () => await stopper();
 }
 
 function decodeArgs() {
