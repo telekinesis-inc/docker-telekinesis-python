@@ -77,6 +77,7 @@ class Pod {
 const contextFactory = (stopper, runner) => {
   const context = async (...args) => await runner(...args);
   context.stop = async () => await stopper();
+  return context;
 }
 
 function decodeArgs() {
