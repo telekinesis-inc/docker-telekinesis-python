@@ -65,7 +65,7 @@ def prepare_js_files(path, dependencies):
         file_out.write(dockerfile)
 
     scriptbase = importlib.resources.read_text(__package__, "script_base.js")
-    script = '\n'.join([f'require({d});' for d in dependencies] + [scriptbase])
+    script = '\n'.join([f'require("{d}");' for d in dependencies] + [scriptbase])
 
     with open(os.path.join(path, 'script.js'), 'w') as file_out:
         file_out.write(script)
