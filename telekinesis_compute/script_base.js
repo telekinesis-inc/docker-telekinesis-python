@@ -1,6 +1,6 @@
 const tk = require('telekinesis-js');
 const vm = require('vm');
-const { spawn } = require('child_process');
+const { exec } = require('child_process');
 
 class ConsoleCapture {
   constructor(callback) {
@@ -78,14 +78,8 @@ class Pod {
 const contextFactory = (stopper, runner) => {
   const context = async (...args) => await runner(...args);
   context.stop = async () => await stopper();
-  context.execCommand = (...args) => new Promise((r, re) => {
-    let cmd = spawn(...args);
-    let stdout = [];
-    let stderr = []
-
-    cmd.stdout.on('data', data => stdout.push(data))
-    cmd.stderr.on('data', data => stderr.push(data))
-    cmd.on('close', stderr.length ? re([stdout, stderr]) : r(stdout))
+  context.execCommand = (cmd) => new Promise((r, re) => {
+    exec(cmd, (err, stdout, stderr) => err ? re(stderr || "") : r(stdout || ""));
   });
   return context;
 }
