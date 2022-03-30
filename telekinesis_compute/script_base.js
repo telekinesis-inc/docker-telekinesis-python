@@ -1,5 +1,6 @@
 const tk = require('telekinesis-js');
 const vm = require('vm');
+const esprima = require('esprima')
 const { exec } = require('child_process');
 
 class ConsoleCapture {
@@ -25,6 +26,22 @@ class Pod {
     this._runner = undefined;
   }
   async execute(code, inputs, outputs, scope, print_callback, inject_context) {
+    const randStr = () => '_'+(Math.random() + 1).toString(36).substring(2);
+    const syntaxTree = esprima.parse(code).body;
+    const mappings = Array.from(syntaxTree.reduce((p, x) => {
+        if (x.type === 'ClassDeclaration') {
+          p.add(x.id.name);
+        } else if (x.type == 'VariableDeclaration') {
+          x.declarations.forEach(y => {
+            y.id.type === 'Identifier'? p.add(y.id.name) :
+              y.id.type === 'ArrayPattern'? y.id.elements.forEach(z => p.add(z.name)) : null
+          })
+        }
+        return p;
+      }, new Set()
+    )).reduce((p, v) => {p[randStr()] = v; return p}, {});
+    const suffix = Object.entries(mappings).map(x => x.join(' = ')).join('\n') + '\n});'
+
     inputs = inputs || {};
     inputs.require = require;
     inputs.console = new ConsoleCapture(async (...args) => {
@@ -40,9 +57,11 @@ class Pod {
       inputs._tkcContext = contextFactory(this._stopCallback, this._runner)
     }
     let context = vm.createContext(inputs);
-    const content = '(async () => {\n' +code+"\n})";
+    const content = '(async () => {\n' +code+'\n'+suffix;
     await vm.runInContext(content, context)();
-    let out = Object.entries(context).filter(([k, _]) => !['require', 'console'].includes(k)).reduce((p, v) => {p[v[0]] = v[1]; return p}, {}); 
+    let out = Object.entries(context).filter(([k, _]) => !['require', 'console'].includes(k))
+      .map(([k, v]) => mappings.hasOwnProperty(k) ? [mappings[k], v]: [k, v])
+      .reduce((p, v) => {p[v[0]] = v[1]; return p}, {});
     if (scope) {
       this.scopes[scope] = {...this.scopes[scope], ...out};
     }
@@ -51,10 +70,16 @@ class Pod {
       if (!(outputs instanceof Array)) {
         return out[outputs];
       } 
-      return Object.entries(out).filter(([k, _]) => outputs.includes(k)).reduce((p, v) => {p[v[0]] = v[1]; return p}, {});
+      return Object.entries(out).reduce((p, [k, v]) => {
+        if (outputs.includes(k)) {p[k] = v;} 
+        return p;
+      }, {});
     }
     if (scope === undefined) {
-      return out;
+      return Object.entries(out).reduce((p, [k, v]) => {
+        if (k[0] != '_') {p[k] = v;}
+        return p;
+      }, {});
     }
   }
   async stop() {

@@ -8,7 +8,7 @@ RUN mkdir /home/user/src
 WORKDIR /home/user/src
 
 RUN npm install npm@8.5.4
-RUN npm install telekinesis-js ws
+RUN npm install telekinesis-js ws esprima
 COPY script.js .
 
 {{PKG_DEPENDENCIES}}
