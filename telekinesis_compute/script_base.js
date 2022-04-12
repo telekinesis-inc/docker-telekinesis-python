@@ -23,7 +23,7 @@ class Pod {
     this._resolve = resolve;
     this._stopCallback = undefined;
     this._keepAliveCallback = undefined
-    this._runner = undefined;
+    this._serviceRunner = undefined;
   }
   async execute(code, inputs, outputs, scope, print_callback, inject_context) {
     const randStr = () => '_'+(Math.random() + 1).toString(36).substring(2);
@@ -54,7 +54,7 @@ class Pod {
       inputs = {...this.scopes[scope], ...inputs}
     }
     if (inject_context) {
-      inputs._tkcContext = contextFactory(this._stopCallback, this._runner)
+      inputs._tkcContext = contextFactory(this._stopCallback, this._serviceRunner)
     }
     let context = vm.createContext(inputs);
     const content = '(async () => {\n' +code+'\n'+suffix;
@@ -88,10 +88,9 @@ class Pod {
     }
     this._resolve()
   }
-  _updateCallbacks(stopCallback, keepAliveCallback, runner) {
-    this._stopCallback = stopCallback;
+  _updateCallbacks(keepAliveCallback, serviceRunner) {
     this._keepAliveCallback = keepAliveCallback;
-    this._runner = runner;
+    this._serviceRunner = serviceRunner;
 
     return this;
   }
@@ -161,7 +160,11 @@ const main = (kwargs) => new Promise(resolve => {
     let entrypoint = new tk.Entrypoint(kwargs.url, privateKey);
     let route = tk.Route.fromObject(JSON.parse(kwargs.route_str));
     // entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)(console.error || 0, pod));
-    entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)((scb, kacb, runner) => pod._updateCallbacks(scb, kacb, runner), pod));
+    entrypoint.then(async () => {
+      pod._stopCallback = await new tk.Telekinesis(route, entrypoint._session)(
+        (keepAliveCb, serviceRunner) => pod._updateCallbacks(keepAliveCb, serviceRunner), pod
+      );
+    });
     entrypoint._session.messageListener = md => pod._keepAlive(md);
   } else {
     tk.authenticate(kwargs.url, privateKey).data.put(pod, kwargs.pod_name).then(() => console.error('>> Pod is running'));

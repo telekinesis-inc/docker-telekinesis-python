@@ -197,8 +197,7 @@ class Pod:
     async def install_package(self, package_name, print_callback=None):
         return await self._exec_command('pip install '+ package_name, print_callback)
 
-    def _update_callbacks(self, stop_callback, keep_alive_callback, runner):
-        self._stop_callback = stop_callback
+    def _update_callbacks(self, keep_alive_callback, runner):
         self._keep_alive_callback = keep_alive_callback
         self._runner = runner
         return self
@@ -314,7 +313,7 @@ async def start_pod(executor, url, pod_name, private_key_str=None, key_password=
     if route_str:
         entrypoint = await tk.Entrypoint(url, private_key)
         route = tk.Route(**json.loads(route_str))
-        await tk.Telekinesis(route, entrypoint._session)(pod._update_callbacks, pod)
+        pod._stop_callback = await tk.Telekinesis(route, entrypoint._session)(pod._update_callbacks, pod)
         entrypoint._session.message_listener = pod._keep_alive
     else:
         await tk.authenticate(url, private_key).data.put(pod, pod_name)

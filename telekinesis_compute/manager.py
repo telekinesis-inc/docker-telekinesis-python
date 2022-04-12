@@ -73,6 +73,7 @@ def prepare_js_files(path, dependencies):
 class AppManager:
     def __init__(self, session, path, sudo_rm=False):
         self.running = {}
+        self.stop_callback = None
         self.client = docker.from_env()
         self.url = list(session.connections)[0].url
         self._sudo = sudo_rm
@@ -102,6 +103,9 @@ class AppManager:
         await build.stdout.read()
         # await self.client.images.build(path_dockerfile='./docker_telekinesis_python/', tag=tag)
 
+    def set_stop_callback(self, stop_callback):
+        self.stop_callback = stop_callback
+
     async def get_pod(self, pkg_dependencies, base, cpus, memory, gpu, upgrade=False):
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
 
@@ -117,7 +121,12 @@ class AppManager:
                 self._logger.info('pod %s: called awaiter', client_pubkey[:6])
                 return data['data']
 
-            return (awaiter, lambda *x: data.update({'data': x}) or e.set())
+            def callback(*x):
+                data['data'] = x
+                e.set()
+                return partial(self.stop_callback, client_pubkey)
+
+            return awaiter, callback
 
         awaiter, callback = create_callbackable()
 
