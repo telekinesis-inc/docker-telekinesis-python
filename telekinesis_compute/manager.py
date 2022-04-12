@@ -102,7 +102,7 @@ class AppManager:
         await build.stdout.read()
         # await self.client.images.build(path_dockerfile='./docker_telekinesis_python/', tag=tag)
 
-    async def get_pod(self, pkg_dependencies, base, cpus, memory, gpu):
+    async def get_pod(self, pkg_dependencies, base, cpus, memory, gpu, upgrade=False):
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
 
         client_session = tk.Session()
@@ -121,6 +121,8 @@ class AppManager:
 
         awaiter, callback = create_callbackable()
 
+        if upgrade or not self.client.images.list(name=tag):
+            await self.build_image(pkg_dependencies, base)
         
         data_path = os.path.join(self.path, client_pubkey[:32].replace('/','-'))
         os.mkdir(data_path)
