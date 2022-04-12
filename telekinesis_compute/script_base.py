@@ -201,6 +201,7 @@ class Pod:
         self._stop_callback = stop_callback
         self._keep_alive_callback = keep_alive_callback
         self._runner = runner
+        return self
 
     def _keep_alive(self, metadata):
         if self._keep_alive_callback and metadata.caller.session[0] != self._keep_alive_callback._target.session[0]:

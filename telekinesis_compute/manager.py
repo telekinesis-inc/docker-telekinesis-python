@@ -73,7 +73,6 @@ def prepare_js_files(path, dependencies):
 class AppManager:
     def __init__(self, session, path, sudo_rm=False):
         self.running = {}
-        self.ready = {}
         self.client = docker.from_env()
         self.url = list(session.connections)[0].url
         self._sudo = sudo_rm
@@ -103,7 +102,7 @@ class AppManager:
         await build.stdout.read()
         # await self.client.images.build(path_dockerfile='./docker_telekinesis_python/', tag=tag)
 
-    async def start_container(self, pkg_dependencies, base, cpus, memory, gpu):
+    async def get_pod(self, pkg_dependencies, base, cpus, memory, gpu):
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
 
         client_session = tk.Session()
@@ -159,7 +158,8 @@ class AppManager:
         update_callbacks, pod = await awaiter()
         # container = self.client.containers.get(container_id)
 
-        pod_wrapper = PodWrapper(container_id, pod, update_callbacks, data_path, self._sudo)
+        pod_wrapper = PodWrapper(container_id, pod, update_callbacks, data_path, self)
+        self.running[pod_wrapper.id] = pod_wrapper
         return pod_wrapper
 
     async def clear_containers(self, clear_path=False):
@@ -179,60 +179,60 @@ class AppManager:
 
         return self.client.images.prune()
 
-    async def get_pod(
-        self, pkg_dependencies, account_id, base='python', cpus=1.0, memory=2000, gpu=False, autostop_timeout=None, bind_data=None, stop_callback=None, 
-        provision=False, runner=None, upgrade=False
-    ):
-        tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
-        if not self.ready.get((tag, int(cpus*1000), int(memory))):
-            self._logger.info('awaiting provisioning')
-            await self.provision(1, pkg_dependencies, base, cpus, memory, gpu, upgrade)
-        pod_wrapper = self.ready[(tag, int(cpus*1000), int(memory))].pop()
+    # async def get_pod(
+    #     self, pkg_dependencies, base='python', cpus=1.0, memory=2000, gpu=False, autostop_timeout=None, bind_data=None, stop_callback=None, 
+    #     provision=False, runner=None, upgrade=False
+    # ):
+    #     tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
+    #     if not self.ready.get((tag, int(cpus*1000), int(memory))):
+    #         self._logger.info('awaiting provisioning')
+    #         await self.provision(1, pkg_dependencies, base, cpus, memory, gpu, upgrade)
+    #     pod_wrapper = self.ready[(tag, int(cpus*1000), int(memory))].pop()
 
-        self.running[account_id] = {**self.running.get(account_id, {}), pod_wrapper.id: pod_wrapper}
+    #     self.running[account_id] = {**self.running.get(account_id, {}), pod_wrapper.id: pod_wrapper}
 
-        # if stop_callback or autostop_timeout is not None:
-        await pod_wrapper.update_params(partial(self.stop, account_id, pod_wrapper.id, stop_callback), autostop_timeout, runner)
-        pod_wrapper.reset_timeout()
+    #     # if stop_callback or autostop_timeout is not None:
+    #     await pod_wrapper.update_params(partial(self.stop, account_id, pod_wrapper.id, stop_callback), autostop_timeout, runner)
+    #     pod_wrapper.reset_timeout()
         
-        if bind_data:
-            bind_path = os.path.join(self.path, pod_wrapper.id[:32].replace('/','-'))
-            data_path = os.path.join(bind_path, 'synced')
-            support_path = bind_path +'_support'
-            os.mkdir(support_path)
-            os.mkdir(data_path)
+    #     if bind_data:
+    #         bind_path = os.path.join(self.path, pod_wrapper.id[:32].replace('/','-'))
+    #         data_path = os.path.join(bind_path, 'synced')
+    #         support_path = bind_path +'_support'
+    #         os.mkdir(support_path)
+    #         os.mkdir(data_path)
 
-            pod_wrapper.filesync = FileSync(bind_data, data_path, support_path)
+    #         pod_wrapper.filesync = FileSync(bind_data, data_path, support_path)
 
-        if provision:
-            t = time.time()
-            async def delayed_provisioning(t):
-                await asyncio.sleep(1)
-                await self.provision(1, pkg_dependencies, base, cpus, memory, gpu, upgrade)
-                self.tasks['delayed_provisioning'].pop(t)
-            self.tasks['delayed_provisioning'][t] = asyncio.create_task(delayed_provisioning(t))
+    #     if provision:
+    #         t = time.time()
+    #         async def delayed_provisioning(t):
+    #             await asyncio.sleep(1)
+    #             await self.provision(1, pkg_dependencies, base, cpus, memory, gpu, upgrade)
+    #             self.tasks['delayed_provisioning'].pop(t)
+    #         self.tasks['delayed_provisioning'][t] = asyncio.create_task(delayed_provisioning(t))
 
-        return pod_wrapper.pod
+    #     return pod_wrapper.pod
 
-    async def provision(self, number, pkg_dependencies, base, cpus, memory, gpu, upgrade):
-        self._logger.info('provisioning %s pods', number)
-        tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
-        if not (tag, int(cpus*1000), int(memory)) in self.ready:
-            self.ready[(tag, int(cpus*1000), int(memory))] = []
+    # async def provision(self, number, pkg_dependencies, base, cpus, memory, gpu, upgrade):
+    #     self._logger.info('provisioning %s pods', number)
+    #     tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
+    #     if not (tag, int(cpus*1000), int(memory)) in self.ready:
+    #         self.ready[(tag, int(cpus*1000), int(memory))] = []
 
-        if upgrade or not self.client.images.list(name=tag):
-            await self.build_image(pkg_dependencies, base)
+    #     if upgrade or not self.client.images.list(name=tag):
+    #         await self.build_image(pkg_dependencies, base)
 
-        self.ready[(tag, int(cpus*1000), int(memory))].extend(
-            await asyncio.gather(*[self.start_container(pkg_dependencies, base, cpus, memory, gpu) for _ in range(number)])
-        )
+    #     self.ready[(tag, int(cpus*1000), int(memory))].extend(
+    #         await asyncio.gather(*[self.start_container(pkg_dependencies, base, cpus, memory, gpu) for _ in range(number)])
+    #     )
 
-    async def stop(self, account_id, pod_id, callback=None, logs=None):
-        p = self.running.get(account_id, {}).pop(pod_id, None)
-        if p and callback:
-            self.tasks['stop_callback'][time.time()] = asyncio.create_task(callback(pod_id, logs=logs)._execute())
-        elif callback:
-            self._logger.info('pod %s: not found in manager.running', pod_id[:6])
+    # async def stop(self, account_id, pod_id, callback=None, logs=None):
+    #     p = self.running.get(account_id, {}).pop(pod_id, None)
+    #     if p and callback:
+    #         self.tasks['stop_callback'][time.time()] = asyncio.create_task(callback(pod_id, logs=logs)._execute())
+    #     elif callback:
+    #         self._logger.info('pod %s: not found in manager.running', pod_id[:6])
 
     async def check_running(self):
         running_containers = (await (await asyncio.create_subprocess_shell(
@@ -240,11 +240,10 @@ class AppManager:
             stdout=asyncio.subprocess.PIPE)
         ).stdout.read()).decode().strip('\n').split('\n')
 
-        for account_pods in self.running.values():
-            for pod_wrapper in account_pods.values():
-                if pod_wrapper.container_id not in running_containers:
-                    self._logger.info('pod %s: container %s stopped', pod_wrapper.id[:6], pod_wrapper.container_id[:8])
-                    await pod_wrapper.stop(False)
+        for pod_wrapper in self.running.values():
+            if pod_wrapper.container_id not in running_containers:
+                self._logger.info('pod %s: container %s stopped', pod_wrapper.id[:6], pod_wrapper.container_id[:8])
+                await pod_wrapper.stop(False)
     
     async def loop_check_running(self):
         while True:
@@ -255,9 +254,10 @@ class AppManager:
                 # pass
 
 class PodWrapper:
-    def __init__(self, container_id, pod, update_callbacks, bind_dir, sudo_rm=False):
+    def __init__(self, container_id, pod, update_callbacks, bind_dir, manager):
         self._logger = logging.getLogger(__name__)
-        self._sudo = sudo_rm
+        self._sudo = manager._sudo
+        self._manager = manager
         self.container_id = container_id
         self.pod_update_callbacks = update_callbacks
         self.pod = pod
@@ -297,7 +297,9 @@ class PodWrapper:
         self.stop_callback = stop_callback
         self.autostop_timeout = autostop_timeout
 
-        await self.pod_update_callbacks(partial(self.stop, False), self.reset_timeout or 0, runner or 0)
+        self.reset_timeout()
+
+        return await self.pod_update_callbacks(partial(self.stop, False), self.reset_timeout or 0, runner or 0)
     
     async def stop(self, stop_pod=True):
         logs = await (await asyncio.create_subprocess_shell(f'docker logs {self.container_id}', stdout=asyncio.subprocess.PIPE)).stdout.read()
@@ -307,6 +309,8 @@ class PodWrapper:
                 await self.pod.stop()._timeout(5)
             except asyncio.TimeoutError:
                 await asyncio.create_subprocess_shell(f'docker container stop -t 0 {self.container_id}')
+        
+        self._manager.running.pop(self.id, None)
         
         status = await (await asyncio.create_subprocess_shell(
             f'docker container ls --all -f id={self.container_id} --format '+"{{.Status}}", 
@@ -336,4 +340,11 @@ class PodWrapper:
 
         await asyncio.create_subprocess_shell(f'docker container rm -f {self.container_id}', )
 
-        
+    def bind_data(self, data):
+        bind_path = os.path.join(self.path, self.id[:32].replace('/','-'))
+        data_path = os.path.join(bind_path, 'synced')
+        support_path = bind_path +'_support'
+        os.mkdir(support_path)
+        os.mkdir(data_path)
+
+        self.filesync = FileSync(data, data_path, support_path)

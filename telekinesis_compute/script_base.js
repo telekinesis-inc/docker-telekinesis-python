@@ -92,6 +92,8 @@ class Pod {
     this._stopCallback = stopCallback;
     this._keepAliveCallback = keepAliveCallback;
     this._runner = runner;
+
+    return this;
   }
   _keepAlive(metadata) {
     if (this._keepAliveCallback && metadata?.caller.session[0] != this._keepAliveCallback._target.session[0]) {
