@@ -1,6 +1,5 @@
 const tk = require('telekinesis-js');
 const vm = require('vm');
-const esprima = require('esprima')
 const { exec } = require('child_process');
 
 class ConsoleCapture {
@@ -8,78 +7,45 @@ class ConsoleCapture {
     this.callback = callback
   }
   async log() {
-    await this.callback(arguments).catch(() => null);
+    await this.callback(...arguments).catch(() => null);
   }
   async error() {
-    await this.callback(arguments).catch(() => null);
+    await this.callback(...arguments).catch(() => null);
   }
 }
 
 class Pod {
   constructor(name, resolve) {
     this.name = name;
-    this.scopes = {};
-    this.log = [];
+    this.calls = [];
     this._resolve = resolve;
     this._stopCallback = undefined;
     this._keepAliveCallback = undefined
-    this._serviceRunner = undefined;
   }
-  async execute(code, inputs, outputs, scope, print_callback, inject_context) {
-    const randStr = () => '_'+(Math.random() + 1).toString(36).substring(2);
-    const syntaxTree = esprima.parse(code).body;
-    const mappings = Array.from(syntaxTree.reduce((p, x) => {
-        if (x.type === 'ClassDeclaration') {
-          p.add(x.id.name);
-        } else if (x.type == 'VariableDeclaration') {
-          x.declarations.forEach(y => {
-            y.id.type === 'Identifier'? p.add(y.id.name) :
-              y.id.type === 'ArrayPattern'? y.id.elements.forEach(z => p.add(z.name)) : null
-          })
-        }
-        return p;
-      }, new Set()
-    )).reduce((p, v) => {p[randStr()] = v; return p}, {});
-    const suffix = Object.entries(mappings).map(x => x.join(' = ')).join('\n') + '\n});'
+  async execute(code, inputs, consoleLogCallback) {
+    const timestamp = Date.now();
+    const callData = {code, inputs, status: 'RUNNING', log: {}};
+    this.calls.push([timestamp, callData])
+    const suffix = '\n});'
 
-    inputs = inputs || {};
+    inputs = {...inputs} || {};
     inputs.require = require;
     inputs.console = new ConsoleCapture(async (...args) => {
-      this.log.push(args);
-      if (print_callback) {
-        await print_callback(...args);
+      callData.log[Date.now()] = Object.values(args);
+      if (consoleLogCallback) {
+        await consoleLogCallback(...args);
       }
     })
-    if (scope && this.scopes[scope]) {
-      inputs = {...this.scopes[scope], ...inputs}
-    }
-    if (inject_context) {
-      inputs._tkcContext = contextFactory(this._stopCallback, this._serviceRunner)
-    }
     let context = vm.createContext(inputs);
     const content = '(async () => {\n' +code+'\n'+suffix;
-    await vm.runInContext(content, context)();
-    let out = Object.entries(context).filter(([k, _]) => !['require', 'console'].includes(k))
-      .map(([k, v]) => mappings.hasOwnProperty(k) ? [mappings[k], v]: [k, v])
-      .reduce((p, v) => {p[v[0]] = v[1]; return p}, {});
-    if (scope) {
-      this.scopes[scope] = {...this.scopes[scope], ...out};
-    }
-
-    if (outputs) {
-      if (!(outputs instanceof Array)) {
-        return out[outputs];
-      } 
-      return Object.entries(out).reduce((p, [k, v]) => {
-        if (outputs.includes(k)) {p[k] = v;} 
-        return p;
-      }, {});
-    }
-    if (scope === undefined) {
-      return Object.entries(out).reduce((p, [k, v]) => {
-        if (k[0] != '_') {p[k] = v;}
-        return p;
-      }, {});
+    try {
+      callData.output = await vm.runInContext(content, context)();
+      callData.status = 'SUCCEEDED';
+      return callData.output
+    } catch(e) {
+      callData.output = e;
+      callData.status = 'ERROR';
+      throw e;
     }
   }
   async stop() {
@@ -101,14 +67,6 @@ class Pod {
   }
 }
 
-const contextFactory = (stopper, runner) => {
-  const context = async (...args) => await runner(...args);
-  context.stop = async () => await stopper();
-  context.execCommand = (cmd) => new Promise((r, re) => {
-    exec(cmd, (err, stdout, stderr) => err ? re(stderr || "") : r(stdout || ""));
-  });
-  return context;
-}
 
 function decodeArgs() {
   let kwargs = {}

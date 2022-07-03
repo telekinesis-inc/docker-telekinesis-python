@@ -101,7 +101,6 @@ class AppManager:
             stdout=asyncio.subprocess.PIPE
         )
         await build.stdout.read()
-        # await self.client.images.build(path_dockerfile='./docker_telekinesis_python/', tag=tag)
 
     def set_stop_callback(self, stop_callback):
         self.stop_callback = stop_callback

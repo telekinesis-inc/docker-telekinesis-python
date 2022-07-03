@@ -4,6 +4,7 @@ import os
 import signal
 import json
 import re
+import time
 from contextlib import redirect_stdout, redirect_stderr
 from collections import deque
 import threading
@@ -29,43 +30,6 @@ def _extract_line_blocks(s, _t=None):
     if start:
         return ["", True], *out
     return out
-
-
-def _preprocess_code(code, mappings):
-    blocks = []
-    for i, block in enumerate(code.split('"""')):
-        if i%2 == 0:
-            lines = []
-            for line in block.split('\n'):
-                line_blocks = _extract_line_blocks(line)
-                ending = ''
-                for lb in line_blocks:
-                    if not lb[1]: # not string literal
-                        x, *comment = lb[0].split('#')
-                        # print(x, comment)
-                        for token, mapping in mappings.items():
-                            if not ending and re.match(f'^\s*\{token}\s*(?=[^= ])', lb[0]):
-                                x = re.sub(f'^\s*\{token}\s*(?=[^= ])','await '+mapping[0], x)
-                                ending = mapping[1]
-                            if not ending and re.match(f'.*\{token}\s*(?=[^= ])', x):
-                                
-                                x = re.sub(f'\{token}\s*(?=[^= ])',
-                                               'await '+mapping[0], x)
-                                ending = mapping[2]
-                        if comment:
-                            lb[0] = '#'.join([x, ending, *comment])
-                            ending = ''
-                            break
-                        else:
-                            lb[0] = x
-                    elif ending:
-                        lb[0] = '\\' + lb[0][:-1] + '\\' + lb[0][-1]
-
-                lines.append(''.join([*[lb[0] for lb in line_blocks], ending]))
-            blocks.append('\n'.join(lines))
-        else:
-            blocks.append(block)
-    return '"""'.join(blocks)
 
 
 class StdOutCapture:
@@ -129,53 +93,39 @@ class Context:
 class Pod:
     def __init__(self, name, executor, lock):
         self.name = name
-        self.scopes = {}
+        self.calls = []
         self._executor = executor
-        self.log = []
         self._lock = lock
         self._stop_callback = None
         self._keep_alive_callback = None
-        self._runner = None
 
-    async def execute(self, code, inputs=None, outputs=None, scope=None, print_callback=None, inject_context=False):
+    async def execute(self, code, inputs=None, print_callback=None):
         lock = asyncio.Event()
+        timestamp = time.time()
+        call_data = {'code': code, 'inputs': inputs, 'status': 'RUNNING', 'log': {}}
+        self.calls.append((timestamp, call_data)) 
 
         inputs = inputs or {}
-        if scope:
-            inputs.update({k: v for k, v in self.scopes.get(scope, {}).items() if k not in inputs.keys()})
-        if inject_context and '_tkc_context' not in inputs:
-            inputs['_tkc_context'] = tk.Telekinesis(Context(self.stop, asyncio.get_event_loop(), self._runner), tk.Session())
-        if inject_context:
-            code = _preprocess_code(code, {
-                '!': ('_tkc_context.exec_command("', '", stream_print=True)', '")'), 
-                '$': ('_tkc_context', '', '')
-            })
 
         async def lock_set():
             lock.set()
 
         async def print_cb(*args):
-            self.log.append(args)
+            call_data['log'][time.time()] = args
             if print_callback:
                 await print_callback(*args)
 
         job = Job(code, inputs, print_cb, lock_set, asyncio.get_event_loop())
         self._executor.enqueue(job)
         await lock.wait()
-        t, new_vars = job.returns
+        t, out = job.returns
+        call_data['output'] = out
         if t == 'return':
-            if scope:
-                if not scope in self.scopes:
-                    self.scopes[scope] = {}
-                self.scopes[scope].update(new_vars)
-            if outputs:
-                if isinstance(outputs, str):
-                    return new_vars.get(outputs)
-                return {k: v for k, v in new_vars if k in outputs}
-            if scope is None:
-                return new_vars
+            call_data['status'] = 'SUCCEEDED'
+            return out
         else:
-            raise new_vars
+            call_data['status'] = 'ERROR'
+            raise out
 
     async def stop(self):
         async def cleanup():
@@ -199,7 +149,7 @@ class Pod:
 
     def _update_callbacks(self, keep_alive_callback, runner):
         self._keep_alive_callback = keep_alive_callback
-        self._runner = runner
+        # self._runner = runner
         return self
 
     def _keep_alive(self, metadata):
@@ -231,22 +181,21 @@ class Executor:
         self.call_lock.set()
 
     async def _execute(self, code, inputs, print_callback, loop):
-        prefix = f'async def _tkc_wrapper({", ".join(["_tkc_new_vars", *[k for k in inputs]])}):\n'
+        prefix = f'async def _tkc_wrapper({", ".join([k for k in inputs])}):\n'
         content = ('\n'+code).replace('\n', '\n ')
-        suffix = "\n for _var in dir():\n  if _var[0] != '_':\n   _tkc_new_vars[_var] = eval(_var)"
+        # suffix = "\n for _var in dir():\n  if _var[0] != '_':\n   _tkc_new_vars[_var] = eval(_var)"
 
         tmp = {}
-        exec(prefix+content+suffix, tmp)
-        new_vars = {}
+        exec(prefix+content, tmp)
         if print_callback:
             stderr = StdOutCapture(print_callback, loop, True)
             with redirect_stderr(stderr):
                 stdout = StdOutCapture(print_callback, loop)
                 with redirect_stdout(stdout):
-                    await tmp['_tkc_wrapper'](new_vars, **inputs)
+                    out = await tmp['_tkc_wrapper'](**inputs)
         else:
-            await tmp['_tkc_wrapper'](new_vars, **inputs)
-        return new_vars
+            out = await tmp['_tkc_wrapper'](**inputs)
+        return out
 
     async def run(self):
         while not self.stop_lock.is_set():
