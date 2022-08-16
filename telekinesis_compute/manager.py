@@ -266,7 +266,7 @@ class PodWrapper:
          
     async def update_params(self, idle_timeout, run_timeout):
         self.idle_timeout = idle_timeout
-        self.run_timeout = idle_timeout
+        self.run_timeout = run_timeout
 
         self.reset_timeout()
 
