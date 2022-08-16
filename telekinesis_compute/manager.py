@@ -270,7 +270,7 @@ class PodWrapper:
 
         self.reset_timeout()
 
-        return await self.pod_update_callbacks(self.reset_timeout or 0, service_runner or 0)
+        return await self.pod_update_callbacks(self.reset_timeout or 0, 0)
     
     async def stop(self):
         logs = await (await asyncio.create_subprocess_shell(f'docker logs {self.container_id}', stdout=asyncio.subprocess.PIPE)).stdout.read()
