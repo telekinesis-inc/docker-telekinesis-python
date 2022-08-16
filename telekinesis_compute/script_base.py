@@ -12,26 +12,6 @@ import threading
 import telekinesis as tk
 
 
-def _extract_line_blocks(s, _t=None):
-    start = False
-    if not s:
-        if _t is None:
-            return [["", False]]
-        raise SyntaxError('EOL while scanning string literal')
-    if s[0] in ['"', "'"]:
-        if _t == s[0]: # close string
-            return [_t, True], *_extract_line_blocks(s[1:])
-        elif _t is None:
-            _t = s[0]
-            start = True
-    
-    [ss, _], *tail = _extract_line_blocks(s[1:], _t)
-    out = [s[0]+ss, _t is not None], *tail
-    if start:
-        return ["", True], *out
-    return out
-
-
 class StdOutCapture:
     def __init__(self, callback, loop=None, direct=False):
         self.callback = callback

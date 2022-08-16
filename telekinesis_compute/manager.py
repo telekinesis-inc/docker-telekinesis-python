@@ -20,14 +20,14 @@ def prepare_python_files(path, dependencies):
     with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
         file_out.write(dockerfile)
 
-    scriptbase = importlib.resources.read_text(__package__, "script_base.py")
+    base_script = importlib.resources.read_text(__package__, "script_base.py")
     script = '\n'.join([
         'import sys',
         *[
             f'try: import {d.replace("-", "_")}\nexcept Exception as e: print(e, file=sys.stderr)'
             for d in deps_import_names
         ],
-        scriptbase
+        base_script
     ])
 
 
@@ -44,14 +44,14 @@ def prepare_pytorch_files(path, dependencies):
     with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
         file_out.write(dockerfile)
 
-    scriptbase = importlib.resources.read_text(__package__, "script_base.py")
+    base_script = importlib.resources.read_text(__package__, "script_base.py")
     script = '\n'.join([
         'import sys',
         *[
             f'try: import {d.replace("-", "_")}\nexcept Exception as e: print(e, file=sys.stderr)'
             for d in deps_import_names
         ],
-        scriptbase
+        base_script
     ])
 
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
@@ -64,8 +64,8 @@ def prepare_js_files(path, dependencies):
     with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
         file_out.write(dockerfile)
 
-    scriptbase = importlib.resources.read_text(__package__, "script_base.js")
-    script = '\n'.join([f'require("{d}");' for d in dependencies] + [scriptbase])
+    base_script = importlib.resources.read_text(__package__, "script_base.js")
+    script = '\n'.join([f'require("{d}");' for d in dependencies] + [base_script])
 
     with open(os.path.join(path, 'script.js'), 'w') as file_out:
         file_out.write(script)
@@ -192,61 +192,6 @@ class AppManager:
 
         return self.client.images.prune()
 
-    # async def get_pod(
-    #     self, pkg_dependencies, base='python', cpus=1.0, memory=2000, gpu=False, autostop_timeout=None, bind_data=None, stop_callback=None, 
-    #     provision=False, runner=None, upgrade=False
-    # ):
-    #     tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
-    #     if not self.ready.get((tag, int(cpus*1000), int(memory))):
-    #         self._logger.info('awaiting provisioning')
-    #         await self.provision(1, pkg_dependencies, base, cpus, memory, gpu, upgrade)
-    #     pod_wrapper = self.ready[(tag, int(cpus*1000), int(memory))].pop()
-
-    #     self.running[account_id] = {**self.running.get(account_id, {}), pod_wrapper.id: pod_wrapper}
-
-    #     # if stop_callback or autostop_timeout is not None:
-    #     await pod_wrapper.update_params(partial(self.stop, account_id, pod_wrapper.id, stop_callback), autostop_timeout, runner)
-    #     pod_wrapper.reset_timeout()
-        
-    #     if bind_data:
-    #         bind_path = os.path.join(self.path, pod_wrapper.id[:32].replace('/','-'))
-    #         data_path = os.path.join(bind_path, 'synced')
-    #         support_path = bind_path +'_support'
-    #         os.mkdir(support_path)
-    #         os.mkdir(data_path)
-
-    #         pod_wrapper.filesync = FileSync(bind_data, data_path, support_path)
-
-    #     if provision:
-    #         t = time.time()
-    #         async def delayed_provisioning(t):
-    #             await asyncio.sleep(1)
-    #             await self.provision(1, pkg_dependencies, base, cpus, memory, gpu, upgrade)
-    #             self.tasks['delayed_provisioning'].pop(t)
-    #         self.tasks['delayed_provisioning'][t] = asyncio.create_task(delayed_provisioning(t))
-
-    #     return pod_wrapper.pod
-
-    # async def provision(self, number, pkg_dependencies, base, cpus, memory, gpu, upgrade):
-    #     self._logger.info('provisioning %s pods', number)
-    #     tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
-    #     if not (tag, int(cpus*1000), int(memory)) in self.ready:
-    #         self.ready[(tag, int(cpus*1000), int(memory))] = []
-
-    #     if upgrade or not self.client.images.list(name=tag):
-    #         await self.build_image(pkg_dependencies, base)
-
-    #     self.ready[(tag, int(cpus*1000), int(memory))].extend(
-    #         await asyncio.gather(*[self.start_container(pkg_dependencies, base, cpus, memory, gpu) for _ in range(number)])
-    #     )
-
-    # async def stop(self, account_id, pod_id, callback=None, logs=None):
-    #     p = self.running.get(account_id, {}).pop(pod_id, None)
-    #     if p and callback:
-    #         self.tasks['stop_callback'][time.time()] = asyncio.create_task(callback(pod_id, logs=logs)._execute())
-    #     elif callback:
-    #         self._logger.info('pod %s: not found in manager.running', pod_id[:6])
-
     async def check_running(self):
         running_containers = (await (await asyncio.create_subprocess_shell(
             'docker container ls -q --no-trunc', 
@@ -274,25 +219,35 @@ class PodWrapper:
         self.container_id = None
         self.pod_update_callbacks = None
         self.pod = None
-        self.id = pod_id
-        self.service_runner = None
-        self.autostop_timeout = None
-        self.autostop_time = 0
-        self.autostop_task = None
         self.filesync = None
+        self.id = pod_id
+        self.idle_timeout = None
+        self.idle_stop_time = 0
+        self.run_timeout = None
+        self.run_stop_time = 0
+        self.stop_task = None
         self.bind_dir = bind_dir
         self.stopping = False
 
     def reset_timeout(self):
         self._logger.info('pod %s: keep alive', self.id[:6])
-        if self.autostop_timeout is not None:
-            self.autostop_time = time.time() + self.autostop_timeout
-            if self.autostop_task is None:
-                self.autostop_task = asyncio.create_task(self.autostop(self.autostop_timeout))
+        if self.idle_timeout is not None or self.run_timeout is not None:
+            if self.idle_timeout is not None:
+                self.idle_stop_time = time.time() + self.idle_timeout
+            if self.run_timeout is not None:
+                self.run_stop_time = time.time() + self.run_timeout
+            if self.stop_task is None:
+                self.stop_task = asyncio.create_task(self.delayed_stop(max(2, min(
+                    (self.idle_timeout is None and self.run_timeout) or self.idle_stop_time or 0, 
+                    (self.run_timeout is None and self.idle_stop_time) or self.run_timeout or 0
+                ))))
 
-    async def autostop(self, delay):
+    async def delayed_stop(self, delay):
         await asyncio.sleep(delay)
-        if self.autostop_time and self.autostop_time < time.time():
+        if self.run_stop_time and self.run_stop_time < time.time():
+            await self.stop()
+
+        elif self.idle_stop_time and self.idle_stop_time < time.time():
             p = await asyncio.create_subprocess_shell(
                 'docker stats --no-stream --format "{{.CPUPerc}}" '+self.container_id[:10],
                 stdout=asyncio.subprocess.PIPE)
@@ -301,13 +256,17 @@ class PodWrapper:
                 await self.stop()
             else:
                 self._logger.info('pod %s: extending because of cpu_utilization %s', self.id[:6], cpu_utilization)
-                self.autostop_task = asyncio.create_task(self.autostop(max(2, self.autostop_timeout)))
+                self.stop_task = asyncio.create_task(self.delayed_stop(max(2, self.idle_timeout)))
         else:
             # print('extending', self.autostop_time - time.time())
-            self.autostop_task = asyncio.create_task(self.autostop(max(2, self.autostop_time-time.time())))
+            self.stop_task = asyncio.create_task(self.delayed_stop(max(2, min(
+                (self.idle_timeout is None and self.run_timeout) or self.idle_stop_time or 0, 
+                (self.run_timeout is None and self.idle_stop_time) or self.run_timeout or 0
+            ))))
          
-    async def update_params(self, autostop_timeout, service_runner):
-        self.autostop_timeout = autostop_timeout
+    async def update_params(self, idle_timeout, run_timeout):
+        self.idle_timeout = idle_timeout
+        self.run_timeout = idle_timeout
 
         self.reset_timeout()
 
