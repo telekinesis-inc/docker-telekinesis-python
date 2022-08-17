@@ -8,7 +8,7 @@ import docker
 import logging
 from functools import partial
 
-from telekinesis_data import FileSync
+# from telekinesis_data import FileSync
 
 def prepare_python_files(path, dependencies):
     dockerbase = importlib.resources.read_text(__package__, f"Dockerfile_python")
@@ -111,9 +111,9 @@ class AppManager:
         client_session = tk.Session()
         client_pubkey = client_session.session_key.public_serial()
 
-        data_path = os.path.join(self.path, client_pubkey[:32].replace('/','-'))
+        # data_path = os.path.join(self.path, client_pubkey[:32].replace('/','-'))
 
-        pod_wrapper = PodWrapper(client_pubkey, self, data_path)
+        pod_wrapper = PodWrapper(client_pubkey, self)
 
         def create_callbackable():
             e = asyncio.Event()
@@ -136,7 +136,7 @@ class AppManager:
         if upgrade or not self.client.images.list(name=tag):
             await self.build_image(pkg_dependencies, base)
         
-        os.mkdir(data_path)
+        # os.mkdir(data_path)
 
         route = await tk.Telekinesis(callback, self._session)._delegate(client_pubkey)
 
@@ -149,7 +149,7 @@ class AppManager:
         ]
 
         cmd = " ".join([
-            f"docker run -e {' -e '.join(environment)} -d --network=host -v {data_path}:/home/user/data/",
+            f"docker run -e {' -e '.join(environment)} -d --network=host ",
             f"{'--gpus all --ipc=host' if gpu else ''} --cpus={cpus:.2f} --memory='{int(memory)}m'",
             f"-l telekinesis-compute {tag}"
         ])
@@ -212,21 +212,21 @@ class AppManager:
                 # pass
 
 class PodWrapper:
-    def __init__(self, pod_id, manager, bind_dir):
+    def __init__(self, pod_id, manager):
         self._logger = logging.getLogger(__name__)
         self._sudo = manager._sudo
         self._manager = manager
         self.container_id = None
         self.pod_update_callbacks = None
         self.pod = None
-        self.filesync = None
+        # self.filesync = None
         self.id = pod_id
         self.idle_timeout = None
         self.idle_stop_time = None
         self.run_timeout = None
         self.run_stop_time = None
         self.stop_task = None
-        self.bind_dir = bind_dir
+        # self.bind_dir = bind_dir
         self.stopping = False
 
     def reset_timeout(self):
@@ -292,33 +292,33 @@ class PodWrapper:
             if self._manager.stop_callback:
                 await self._manager.stop_callback(self.id, logs)
 
-            if self.filesync and self.filesync.task:
-                self.filesync.task.cancel()
-                await self.filesync.sync(False)
-                proc = await asyncio.create_subprocess_shell(
-                    f'{"sudo " if self._sudo else ""}rm -rf {self.filesync.support_dir}',
-                    stderr=asyncio.subprocess.PIPE, 
-                    stdout=asyncio.subprocess.PIPE)
-                await proc.stderr.read()
-                await proc.stdout.read()
+            # if self.filesync and self.filesync.task:
+            #     self.filesync.task.cancel()
+            #     await self.filesync.sync(False)
+            #     proc = await asyncio.create_subprocess_shell(
+            #         f'{"sudo " if self._sudo else ""}rm -rf {self.filesync.support_dir}',
+            #         stderr=asyncio.subprocess.PIPE, 
+            #         stdout=asyncio.subprocess.PIPE)
+            #     await proc.stderr.read()
+            #     await proc.stdout.read()
             
-            proc = await asyncio.create_subprocess_shell(
-                f'{"sudo " if self._sudo else ""}rm -rf {self.bind_dir}', 
-                stderr=asyncio.subprocess.PIPE, 
-                stdout=asyncio.subprocess.PIPE)
-            await proc.stderr.read()
-            await proc.stdout.read()
+            # proc = await asyncio.create_subprocess_shell(
+            #     f'{"sudo " if self._sudo else ""}rm -rf {self.bind_dir}', 
+            #     stderr=asyncio.subprocess.PIPE, 
+            #     stdout=asyncio.subprocess.PIPE)
+            # await proc.stderr.read()
+            # await proc.stdout.read()
 
             await asyncio.create_subprocess_shell(f'docker container rm -f {self.container_id}', )
 
-    def bind_data(self, data):
-        bind_path = os.path.join(self.path, self.id[:32].replace('/','-'))
-        data_path = os.path.join(bind_path, 'synced')
-        support_path = bind_path +'_support'
-        os.mkdir(support_path)
-        os.mkdir(data_path)
+    # def bind_data(self, data):
+    #     bind_path = os.path.join(self.path, self.id[:32].replace('/','-'))
+    #     data_path = os.path.join(bind_path, 'synced')
+    #     support_path = bind_path +'_support'
+    #     os.mkdir(support_path)
+    #     os.mkdir(data_path)
 
-        self.filesync = FileSync(data, data_path, support_path)
+        # self.filesync = FileSync(data, data_path, support_path)
 
     def _set_container(self, container_id, pod, update_callbacks):
         self.container_id = container_id
