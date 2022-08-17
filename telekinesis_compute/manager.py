@@ -222,9 +222,9 @@ class PodWrapper:
         self.filesync = None
         self.id = pod_id
         self.idle_timeout = None
-        self.idle_stop_time = 0
+        self.idle_stop_time = None
         self.run_timeout = None
-        self.run_stop_time = 0
+        self.run_stop_time = None
         self.stop_task = None
         self.bind_dir = bind_dir
         self.stopping = False
@@ -237,15 +237,15 @@ class PodWrapper:
             if self.run_timeout is not None:
                 self.run_stop_time = time.time() + self.run_timeout
             if self.stop_task is None:
-                self.stop_task = asyncio.create_task(self.delayed_stop(max(2, min(
-                    (self.idle_timeout is None and self.run_timeout) or self.idle_stop_time or 0, 
-                    (self.run_timeout is None and self.idle_stop_time) or self.run_timeout or 0
-                ))))
+                self.stop_task = asyncio.create_task(self.delayed_stop())
 
-    async def delayed_stop(self, delay):
-        await asyncio.sleep(delay)
+    async def delayed_stop(self):
+        stop_time = min(self.run_stop_time or 10**11, self.idle_stop_time or 10**1)
+        print('waiting for stop_time', stop_time-time.time())
+        await asyncio.sleep(max(2, stop_time-time.time()))
         if self.run_stop_time and self.run_stop_time < time.time():
             await self.stop()
+            return
 
         elif self.idle_stop_time and self.idle_stop_time < time.time():
             p = await asyncio.create_subprocess_shell(
@@ -254,15 +254,13 @@ class PodWrapper:
             cpu_utilization = float((await p.stdout.read()).decode().strip('%\n'))
             if cpu_utilization < 1: # 1%
                 await self.stop()
+                return
             else:
                 self._logger.info('pod %s: extending because of cpu_utilization %s', self.id[:6], cpu_utilization)
-                self.stop_task = asyncio.create_task(self.delayed_stop(max(2, self.idle_timeout)))
-        else:
-            # print('extending', self.autostop_time - time.time())
-            self.stop_task = asyncio.create_task(self.delayed_stop(max(2, min(
-                (self.idle_timeout is None and self.run_timeout) or self.idle_stop_time or 0, 
-                (self.run_timeout is None and self.idle_stop_time) or self.run_timeout or 0
-            ))))
+                self.idle_stop_time = time.time() + self.idle_timeout
+
+        # print('extending', self.autostop_time - time.time())
+        self.stop_task = asyncio.create_task(self.delayed_stop())
          
     async def update_params(self, idle_timeout, run_timeout):
         self.idle_timeout = idle_timeout
