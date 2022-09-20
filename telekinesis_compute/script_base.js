@@ -54,11 +54,17 @@ class Pod {
     }
     this._resolve()
   }
-  _updateCallbacks(keepAliveCallback, serviceRunner) {
+  _updateCallbacks(keepAliveCallback, serviceRunner, name) {
     this._keepAliveCallback = keepAliveCallback;
     this._serviceRunner = serviceRunner;
+    if (name) {
+      this.name = name;
+    }
 
     return this;
+  }
+  toString() {
+    return 'Pod('+this.name+')'
   }
   _keepAlive(metadata) {
     if (this._keepAliveCallback && metadata?.caller.session[0] != this._keepAliveCallback._target.session[0]) {

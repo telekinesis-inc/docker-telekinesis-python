@@ -70,6 +70,7 @@ class Context:
     async def __call__(self, *args, **kwargs):
         return await self._runner(*args, **kwargs)
 
+
 class Pod:
     def __init__(self, name, executor, lock):
         self.name = name
@@ -127,8 +128,10 @@ class Pod:
     async def install_package(self, package_name, print_callback=None):
         return await self._exec_command('pip install '+ package_name, print_callback)
 
-    def _update_callbacks(self, keep_alive_callback, runner):
+    def _update_callbacks(self, keep_alive_callback, runner, name=None):
         self._keep_alive_callback = keep_alive_callback
+        if name:
+            self.name = name
         # self._runner = runner
         return self
 

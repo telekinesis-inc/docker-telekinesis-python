@@ -113,7 +113,7 @@ class AppManager:
 
         # data_path = os.path.join(self.path, client_pubkey[:32].replace('/','-'))
 
-        pod_wrapper = PodWrapper(client_pubkey, self)
+        pod_wrapper = PodWrapper(client_pubkey, self, base, cpus, memory, gpu)
 
         def create_callbackable():
             e = asyncio.Event()
@@ -212,7 +212,7 @@ class AppManager:
                 # pass
 
 class PodWrapper:
-    def __init__(self, pod_id, manager):
+    def __init__(self, pod_id, manager, base, cpus, memory, gpu):
         self._logger = logging.getLogger(__name__)
         self._sudo = manager._sudo
         self._manager = manager
@@ -221,6 +221,10 @@ class PodWrapper:
         self.pod = None
         # self.filesync = None
         self.id = pod_id
+        self.base = base
+        self.cpus = cpus
+        self.memory = memory
+        self.gpu = gpu
         self.idle_timeout = None
         self.idle_stop_time = None
         self.run_timeout = None
@@ -262,13 +266,15 @@ class PodWrapper:
         # print('extending', self.autostop_time - time.time())
         self.stop_task = asyncio.create_task(self.delayed_stop())
          
-    async def update_params(self, idle_timeout, run_timeout):
+    async def update_params(self, idle_timeout, run_timeout, name=None):
         self.idle_timeout = idle_timeout
         self.run_timeout = run_timeout
 
         self.reset_timeout()
 
-        return await self.pod_update_callbacks(self.reset_timeout or 0, 0)
+        new_name = name and f'id={self.id[:6]}, base={self.base}, cpus={self.cpus:.2f}, memory={int(self.memory)}, gpu={self.gpu}, name={name}'
+
+        return await self.pod_update_callbacks(self.reset_timeout or 0, 0, new_name)
     
     async def stop(self):
         logs = await (await asyncio.create_subprocess_shell(f'docker logs {self.container_id}', stdout=asyncio.subprocess.PIPE)).stdout.read()
