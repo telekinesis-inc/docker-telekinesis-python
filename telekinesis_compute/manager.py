@@ -274,7 +274,9 @@ class PodWrapper:
 
         new_name = name and f'id={self.id[:6]}, base={self.base}, cpus={self.cpus:.2f}, memory={int(self.memory)}, gpu={self.gpu}, name={name}'
 
-        return await self.pod_update_callbacks(self.reset_timeout or 0, 0, new_name)
+        self.pod = await self.pod_update_callbacks(self.reset_timeout or 0, 0, new_name)
+
+        return self.pod
     
     async def stop(self):
         logs = await (await asyncio.create_subprocess_shell(f'docker logs {self.container_id}', stdout=asyncio.subprocess.PIPE)).stdout.read()
