@@ -22,9 +22,12 @@ class Pod {
     this._stopCallback = undefined;
     this._keepAliveCallback = undefined
   }
-  async execute(code, inputs, consoleLogCallback) {
+  async execute(code, inputs, consoleLogCallback, secret=false) {
     const timestamp = Date.now();
-    const callData = {code, inputs, status: 'RUNNING', log: {}};
+    const callData = {
+      code: secret ? '<HIDDEN>' : code, inputs: secret ? '<HIDDEN>' : inputs,
+      status: 'RUNNING', log: {}
+    };
     this.calls.push([timestamp, callData])
     const suffix = '\n});'
 

@@ -80,10 +80,13 @@ class Pod:
         self._stop_callback = None
         self._keep_alive_callback = None
 
-    async def execute(self, code, inputs=None, print_callback=None):
+    async def execute(self, code, inputs=None, print_callback=None, secret=False):
         lock = asyncio.Event()
         timestamp = time.time()
-        call_data = {'code': code, 'inputs': inputs, 'status': 'RUNNING', 'log': {}}
+        call_data = {
+            'code': '<HIDDEN>' if secret else code, 
+            'inputs': '<HIDDEN>' if secret else inputs, 
+            'status': 'RUNNING', 'log': {}}
         self.calls.append((timestamp, call_data)) 
 
         inputs = inputs or {}
