@@ -16,7 +16,7 @@ RUN mkdir /home/user/data
 WORKDIR /home/user/data/
 
 RUN pip install --upgrade pip
-RUN pip install telekinesis
+RUN pip install telekinesis selenium
 COPY script.py ../src/
 
 {{PKG_DEPENDENCIES}}

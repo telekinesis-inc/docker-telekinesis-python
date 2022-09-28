@@ -53,6 +53,9 @@ def prepare_pyselenium_files(path, dependencies):
         ],
         base_script
     ])
+    with open(os.path.join(path, 'script.py'), 'w') as file_out:
+        file_out.write(script)
+
 
 def prepare_pytorch_files(path, dependencies):
     dockerbase = importlib.resources.read_text(__package__, f"Dockerfile_pytorch")
