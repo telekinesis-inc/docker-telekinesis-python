@@ -34,6 +34,26 @@ def prepare_python_files(path, dependencies):
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
         file_out.write(script)
 
+def prepare_pyselenium_files(path, dependencies):
+    dockerbase = importlib.resources.read_text(__package__, f"Dockerfile_pyselenium")
+    deps_pip_names = [d if isinstance(d, str) else d[0] for d in dependencies]
+    deps_import_names = [d if isinstance(d, str) else d[1] for d in dependencies] + ['selenium']
+
+    dockerfile = dockerbase.replace('{{PKG_DEPENDENCIES}}', '\n'.join('RUN pip install '+ d for d in deps_pip_names))
+
+    with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
+        file_out.write(dockerfile)
+
+    base_script = importlib.resources.read_text(__package__, "script_base.py")
+    script = '\n'.join([
+        'import sys',
+        *[
+            f'try: import {d.replace("-", "_")}\nexcept Exception as e: print(e, file=sys.stderr)'
+            for d in deps_import_names
+        ],
+        base_script
+    ])
+
 def prepare_pytorch_files(path, dependencies):
     dockerbase = importlib.resources.read_text(__package__, f"Dockerfile_pytorch")
     deps_pip_names = [d if isinstance(d, str) else d[0] for d in dependencies]
@@ -86,12 +106,14 @@ class AppManager:
         tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
         if base == 'python':
             prepare_python_files(self.path, pkg_dependencies)
+        elif base == 'pyselenium':
+            prepare_pyselenium_files(self.path, pkg_dependencies)
         elif base == 'pytorch':
             prepare_pytorch_files(self.path, pkg_dependencies)
         elif base == 'js':
             prepare_js_files(self.path, pkg_dependencies)
         else:
-            raise NotImplementedError("Only implemented bases are 'python', 'pytorch' and 'js'")
+            raise NotImplementedError("Only implemented bases are 'python', 'pyselenium', 'pytorch' and 'js'")
 
 
         cmd = f'docker build -t {tag} {self.path}'
