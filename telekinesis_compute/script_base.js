@@ -129,7 +129,7 @@ const main = (kwargs) => new Promise(resolve => {
     // entrypoint.then(async () => await new tk.Telekinesis(route, entrypoint._session)(console.error || 0, pod));
     entrypoint.then(async () => {
       pod._stopCallback = await new tk.Telekinesis(route, entrypoint._session)(
-        (keepAliveCb, serviceRunner) => pod._updateCallbacks(keepAliveCb, serviceRunner), pod
+        (keepAliveCb, serviceRunner, name) => pod._updateCallbacks(keepAliveCb, serviceRunner, name), pod
       );
     });
     entrypoint._session.messageListener = md => pod._keepAlive(md);

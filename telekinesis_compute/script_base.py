@@ -34,43 +34,6 @@ class StdOutCapture:
         self.acc.clear()
 
 
-class Context:
-    def __init__(self, stop, loop, runner):
-        async def _stop():
-            asyncio.run_coroutine_threadsafe(stop(), loop)
-        self.stop = _stop
-        self._runner = runner
-
-    async def exec_command(self, cmd, stream_print=False):
-        async def _read_stream(stream, cb):  
-            while True:
-                line = await stream.readline()
-                if line:
-                    cb(line.decode().rstrip('\n'))
-                else:
-                    break
-
-        async def _stream_subprocess(cmd, stdout_cb, stderr_cb):  
-            process = await asyncio.create_subprocess_shell(cmd,
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-
-            await asyncio.wait([
-                asyncio.create_task(_read_stream(process.stdout, stdout_cb)),
-                asyncio.create_task(_read_stream(process.stderr, stderr_cb))
-            ])
-            return await process.wait()
-        
-        if stream_print:
-            await _stream_subprocess(cmd, print, lambda *x: print(*x, file=sys.stderr))
-        else:
-            process = await asyncio.create_subprocess_shell(cmd,
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
-            return (await process.stdout.read()).decode().split('\n')
-
-    async def __call__(self, *args, **kwargs):
-        return await self._runner(*args, **kwargs)
-
-
 class Pod:
     def __init__(self, name, executor, lock):
         self.name = name
@@ -81,35 +44,7 @@ class Pod:
         self._keep_alive_callback = None
 
     async def execute(self, code, inputs=None, print_callback=None, secret=False):
-        lock = asyncio.Event()
-        timestamp = time.time()
-        call_data = {
-            'code': '<HIDDEN>' if secret else code, 
-            'inputs': '<HIDDEN>' if secret else inputs, 
-            'status': 'RUNNING', 'log': {}}
-        self.calls.append((timestamp, call_data)) 
-
-        inputs = inputs or {}
-
-        async def lock_set():
-            lock.set()
-
-        async def print_cb(*args):
-            call_data['log'][time.time()] = args
-            if print_callback:
-                await print_callback(*args)
-
-        job = Job(code, inputs, print_cb, lock_set, asyncio.get_event_loop())
-        self._executor.enqueue(job)
-        await lock.wait()
-        t, out = job.returns
-        call_data['output'] = out
-        if t == 'return':
-            call_data['status'] = 'SUCCEEDED'
-            return out
-        else:
-            call_data['status'] = 'ERROR'
-            raise out
+        return await self._execute('code', code, inputs, print_callback, secret)
 
     async def stop(self):
         async def cleanup():
@@ -125,11 +60,50 @@ class Pod:
         if self._executor.call_lock.is_set():
             os.kill(os.getpid(), signal.SIGINT)
 
-    async def _exec_command(self, command, print_callback=None):
-        return await self.execute('!'+command, print_callback=print_callback, inject_context=True)
+    async def exec_command(self, command, print_callback=None, secret=False):
+        return await self._execute('command', command, print_callback and True, print_callback, secret)
 
     async def install_package(self, package_name, print_callback=None):
-        return await self._exec_command('pip install '+ package_name, print_callback)
+        return await self.exec_command('pip install '+ package_name, print_callback)
+
+    async def _execute(self, job_type, code, inputs=None, print_callback=None, secret=False):
+        lock = asyncio.Event()
+        timestamp = time.time()
+        if job_type == 'code':
+            call_data = {
+                'code': '<HIDDEN>' if secret else code, 
+                'inputs': '<HIDDEN>' if secret else inputs, 
+                'status': 'RUNNING', 'log': {}}
+        elif job_type == 'command':
+            call_data = {
+                'command': '<HIDDEN>' if secret else code, 
+                'status': 'RUNNING', 'log': {}}
+        else:
+            raise f'job_type: {job_type} should be either code or command'
+
+        self.calls.append((timestamp, call_data)) 
+
+        inputs = inputs or {}
+
+        async def lock_set():
+            lock.set()
+
+        async def print_cb(*args):
+            call_data['log'][time.time()] = args
+            if print_callback:
+                await print_callback(*args)
+
+        job = Job(job_type, code, inputs, print_cb, lock_set, asyncio.get_event_loop())
+        self._executor.enqueue(job)
+        await lock.wait()
+        t, out = job.returns
+        call_data['output'] = out
+        if t == 'return':
+            call_data['status'] = 'SUCCEEDED'
+            return out
+        else:
+            call_data['status'] = 'ERROR'
+            raise out
 
     def _update_callbacks(self, keep_alive_callback, runner, name=None):
         self._keep_alive_callback = keep_alive_callback
@@ -147,7 +121,8 @@ class Pod:
 
 
 class Job:
-    def __init__(self, code, inputs, print_callback, cb, loop):
+    def __init__(self, job_type, code, inputs, print_callback, cb, loop):
+        self.type = job_type
         self.code = code
         self.inputs =  inputs
         self.print_callback = print_callback
@@ -166,7 +141,37 @@ class Executor:
         self.queue.append(job)
         self.call_lock.set()
 
-    async def _execute(self, code, inputs, print_callback, loop):
+    async def _execute_command(self, command, stream_output, print_callback, loop):
+        async def _read_stream(stream, cb):  
+            while True:
+                line = await stream.readline()
+                if line:
+                    cb(line.decode().rstrip('\n'))
+                else:
+                    break
+
+        async def _stream_subprocess(cmd, stdout_cb, stderr_cb):  
+            process = await asyncio.create_subprocess_shell(cmd,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+
+            await asyncio.wait([
+                asyncio.create_task(_read_stream(process.stdout, stdout_cb)),
+                asyncio.create_task(_read_stream(process.stderr, stderr_cb))
+            ])
+            return await process.wait()
+
+        if stream_output:
+            stderr = StdOutCapture(print_callback, loop, True)
+            with redirect_stderr(stderr):
+                stdout = StdOutCapture(print_callback, loop)
+                with redirect_stdout(stdout):
+                    await _stream_subprocess(command, print, lambda *x: print(*x, file=sys.stderr))
+        else:
+            process = await asyncio.create_subprocess_shell(command,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+            return (await process.stdout.read()).decode().split('\n')
+
+    async def _execute_code(self, code, inputs, print_callback, loop):
         prefix = f'async def _tkc_wrapper({", ".join([k for k in inputs])}):\n'
         content = ('\n'+code).replace('\n', '\n ')
         # suffix = "\n for _var in dir():\n  if _var[0] != '_':\n   _tkc_new_vars[_var] = eval(_var)"
@@ -192,7 +197,10 @@ class Executor:
 
             job = self.queue.popleft()
             try:
-                r = await self._execute(job.code, job.inputs, job.print_callback, job.loop)
+                if job.type == 'code':
+                    r = await self._execute_code(job.code, job.inputs, job.print_callback, job.loop)
+                else:
+                    r = await self._execute_command(job.code, job.inputs, job.print_callback, job.loop)
                 t = 'return'
             except (KeyboardInterrupt, Exception) as e:
                 r = e

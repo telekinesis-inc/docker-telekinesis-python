@@ -1,5 +1,8 @@
 FROM python:3.10-slim-buster
 
+RUN apt update
+RUN apt install -y wget git curl
+
 RUN useradd --create-home user
 USER user
 RUN mkdir /home/user/data
