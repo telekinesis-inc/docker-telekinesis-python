@@ -106,7 +106,7 @@ class AppManager:
         self.tasks = {'delayed_provisioning': {}, 'stop_callback': {}, 'check_running_loop': asyncio.create_task(self.loop_check_running())}
 
     async def build_image(self, pkg_dependencies, base):
-        tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
+        tag = '-'.join(['tk', base, *[d.replace('@', 'AT/') if isinstance(d, str) else d[0] for d in pkg_dependencies]])
         if base == 'python':
             prepare_python_files(self.path, pkg_dependencies)
         elif base == 'pyselenium':
@@ -131,7 +131,8 @@ class AppManager:
         self.stop_callback = stop_callback
 
     async def get_pod(self, pkg_dependencies, base, cpus, memory, gpu, upgrade=False):
-        tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
+        # tag = '-'.join(['tk', base, *[d if isinstance(d, str) else d[0] for d in pkg_dependencies]])
+        tag = '-'.join(['tk', base, *[d.replace('@', 'AT/') if isinstance(d, str) else d[0] for d in pkg_dependencies]])
 
         client_session = tk.Session()
         client_pubkey = client_session.session_key.public_serial()
