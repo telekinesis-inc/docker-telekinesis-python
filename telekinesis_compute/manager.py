@@ -20,16 +20,7 @@ def prepare_python_files(path, dependencies):
     with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
         file_out.write(dockerfile)
 
-    base_script = importlib.resources.read_text(__package__, "script_base.py")
-    script = '\n'.join([
-        'import sys',
-        *[
-            f'try: import {d.replace("-", "_")}\nexcept Exception as e: print(e, file=sys.stderr)'
-            for d in deps_import_names
-        ],
-        base_script
-    ])
-
+    script = importlib.resources.read_text(__package__, "script_base.py")
 
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
         file_out.write(script)
@@ -44,15 +35,7 @@ def prepare_pyselenium_files(path, dependencies):
     with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
         file_out.write(dockerfile)
 
-    base_script = importlib.resources.read_text(__package__, "script_base.py")
-    script = '\n'.join([
-        'import sys',
-        *[
-            f'try: import {d.replace("-", "_")}\nexcept Exception as e: print(e, file=sys.stderr)'
-            for d in deps_import_names
-        ],
-        base_script
-    ])
+    script = importlib.resources.read_text(__package__, "script_base.py")
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
         file_out.write(script)
 
@@ -67,15 +50,7 @@ def prepare_pytorch_files(path, dependencies):
     with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
         file_out.write(dockerfile)
 
-    base_script = importlib.resources.read_text(__package__, "script_base.py")
-    script = '\n'.join([
-        'import sys',
-        *[
-            f'try: import {d.replace("-", "_")}\nexcept Exception as e: print(e, file=sys.stderr)'
-            for d in deps_import_names
-        ],
-        base_script
-    ])
+    script = importlib.resources.read_text(__package__, "script_base.py")
 
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
         file_out.write(script)
@@ -87,8 +62,7 @@ def prepare_js_files(path, dependencies):
     with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
         file_out.write(dockerfile)
 
-    base_script = importlib.resources.read_text(__package__, "script_base.js")
-    script = '\n'.join([f'require("{d}");' for d in dependencies] + [base_script])
+    script = importlib.resources.read_text(__package__, "script_base.js")
 
     with open(os.path.join(path, 'script.js'), 'w') as file_out:
         file_out.write(script)
