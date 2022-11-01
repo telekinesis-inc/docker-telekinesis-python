@@ -10,6 +10,7 @@ RUN apt-get update && apt-mark hold iptables && \
       git \
       unzip \
       scrot \
+      python-tk \
       dbus-x11 \
       psmisc \
       xdg-utils \
@@ -63,7 +64,7 @@ RUN mkdir /home/user/data
 WORKDIR /home/user/data/
 
 RUN pip install --upgrade pip
-RUN pip install telekinesis pyautogui
+RUN pip install telekinesis pyautogui pillow
 COPY script.py ../src/
 
 {{PKG_DEPENDENCIES}}
