@@ -57,10 +57,6 @@ RUN apt update -y
 RUN apt install -y google-chrome-stable
 
 RUN useradd --create-home user
-
-COPY vncpasswd /home/user/.vnc/passwd
-RUN chown -R user:user /home/user/.vnc
-
 USER user
 RUN mkdir /home/user/data
 
@@ -71,5 +67,8 @@ RUN pip install telekinesis pyautogui
 COPY script.py ../src/
 
 {{PKG_DEPENDENCIES}}
+
+ENV USER=user
+ENV DISPLAY=:1
 
 ENTRYPOINT ["python", "../src/script.py"]
