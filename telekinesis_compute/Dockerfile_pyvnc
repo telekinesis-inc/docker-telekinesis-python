@@ -1,0 +1,75 @@
+FROM python:3.10-slim-bullseye
+
+RUN apt-get update && apt-mark hold iptables && \
+    env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      tightvncserver \
+      gnupg \
+      libgconf-2-4 \
+      wget \
+      curl \
+      git \
+      unzip \
+      scrot \
+      dbus-x11 \
+      psmisc \
+      xdg-utils \
+      xfonts-base \
+      x11-xserver-utils \
+      x11-utils && \
+    env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      xfce4 && \
+    env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      libgtk-3-bin \
+      libpulse0 \
+      mousepad \
+      xfce4-notifyd \
+      xfce4-taskmanager \
+      xfce4-terminal && \
+    env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      xfce4-battery-plugin \
+      xfce4-clipman-plugin \
+      xfce4-cpufreq-plugin \
+      xfce4-cpugraph-plugin \
+      xfce4-diskperf-plugin \
+      xfce4-datetime-plugin \
+      xfce4-fsguard-plugin \
+      xfce4-genmon-plugin \
+      xfce4-indicator-plugin \
+      xfce4-netload-plugin \
+      xfce4-places-plugin \
+      xfce4-sensors-plugin \
+      xfce4-smartbookmark-plugin \
+      xfce4-systemload-plugin \
+      xfce4-timer-plugin \
+      xfce4-verve-plugin \
+      xfce4-weather-plugin \
+      xfce4-whiskermenu-plugin && \
+    env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      libxv1 \
+      mesa-utils \
+      mesa-utils-extra && \
+    sed -i 's%<property name="ThemeName" type="string" value="Xfce"/>%<property name="ThemeName" type="string" value="Raleigh"/>%' /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
+
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - 
+RUN sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+
+RUN apt update -y
+RUN apt install -y google-chrome-stable
+
+RUN useradd --create-home user
+
+COPY vncpasswd /home/user/.vnc/passwd
+RUN chown -R user:user /home/user/.vnc
+
+USER user
+RUN mkdir /home/user/data
+
+WORKDIR /home/user/data/
+
+RUN pip install --upgrade pip
+RUN pip install telekinesis pyautogui
+COPY script.py ../src/
+
+{{PKG_DEPENDENCIES}}
+
+ENTRYPOINT ["python", "../src/script.py"]

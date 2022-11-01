@@ -39,6 +39,19 @@ def prepare_pyselenium_files(path, dependencies):
     with open(os.path.join(path, 'script.py'), 'w') as file_out:
         file_out.write(script)
 
+def prepare_pyvnc_files(path, dependencies):
+    dockerbase = importlib.resources.read_text(__package__, f"Dockerfile_pyvnc")
+    deps_pip_names = [d if isinstance(d, str) else d[0] for d in dependencies]
+    deps_import_names = [d if isinstance(d, str) else d[1] for d in dependencies] 
+
+    dockerfile = dockerbase.replace('{{PKG_DEPENDENCIES}}', '\n'.join('RUN pip install '+ d for d in deps_pip_names))
+
+    with open(os.path.join(path, 'Dockerfile'), 'w') as file_out:
+        file_out.write(dockerfile)
+
+    script = importlib.resources.read_text(__package__, "script_base.py")
+    with open(os.path.join(path, 'script.py'), 'w') as file_out:
+        file_out.write(script)
 
 def prepare_pytorch_files(path, dependencies):
     dockerbase = importlib.resources.read_text(__package__, f"Dockerfile_pytorch")
@@ -85,12 +98,14 @@ class AppManager:
             prepare_python_files(self.path, pkg_dependencies)
         elif base == 'pyselenium':
             prepare_pyselenium_files(self.path, pkg_dependencies)
+        elif base == 'pyvnc':
+            prepare_pyvnc_files(self.path, pkg_dependencies)
         elif base == 'pytorch':
             prepare_pytorch_files(self.path, pkg_dependencies)
         elif base == 'js':
             prepare_js_files(self.path, pkg_dependencies)
         else:
-            raise NotImplementedError("Only implemented bases are 'python', 'pyselenium', 'pytorch' and 'js'")
+            raise NotImplementedError("Only implemented bases are 'python', 'pyselenium', 'pytorch', 'pyvnc', and 'js'")
 
 
         cmd = f'docker build -t {tag} {self.path}'
