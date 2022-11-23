@@ -32,6 +32,8 @@ class StdOutCapture:
         else:
             asyncio.create_task(self.callback(*self.acc))
         self.acc.clear()
+    def isatty(self):
+        return False
 
 
 class Pod:
