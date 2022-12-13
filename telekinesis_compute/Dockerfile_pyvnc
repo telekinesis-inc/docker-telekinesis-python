@@ -2,6 +2,7 @@ FROM python:3.10-slim-bullseye
 
 RUN apt-get update && apt-mark hold iptables && \
     env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      xclip \
       tightvncserver \
       gnupg \
       libgconf-2-4 \
