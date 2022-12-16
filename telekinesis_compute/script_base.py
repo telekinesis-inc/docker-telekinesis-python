@@ -17,30 +17,39 @@ class StdOutCapture:
         self.callback = callback
         self.loop = loop
         self.direct = direct
-        self.acc = []
+        self.output_accumulator = []
 
     def write(self, out):
         if out != "\n" and not self.direct:
-            self.acc.append(out)
+            self.output_accumulator.append(out)
         else:
             if self.direct:
-                self.acc.append(out)
+                self.output_accumulator.append(out)
             self.flush()
     def flush(self):
         if self.loop:
-            asyncio.run_coroutine_threadsafe(self.callback(*self.acc), self.loop)
+            asyncio.run_coroutine_threadsafe(self.callback(*self.output_accumulator), self.loop)
         else:
-            asyncio.create_task(self.callback(*self.acc))
-        self.acc.clear()
+            asyncio.create_task(self.callback(*self.output_accumulator))
+        self.output_accumulator.clear()
     def isatty(self):
         return False
+
+class PrintCB:
+    def __init__(self, print_callback, call_data):
+        self.print_callback = print_callback
+        self.call_data = call_data
+    async def __call__(self, *args):
+        self.call_data['log'][time.time()] = args
+        if self.print_callback:
+            await self.print_callback(*args)
 
 
 class Pod:
     def __init__(self, name, executor, lock):
         self.name = name
         self.calls = []
-        self._executor = executor
+        self.executor = executor
         self._lock = lock
         self._stop_callback = None
         self._keep_alive_callback = None
@@ -50,16 +59,20 @@ class Pod:
 
     async def stop(self):
         async def cleanup():
-            self._executor.stop_lock.set()
+            self.executor.stop_lock.set()
             if self._stop_callback:
                 await self._stop_callback()
             self._lock.set()
             self.interrupt()
         asyncio.create_task(cleanup())
 
+    def set_concurrency(self, concurrent=True):
+        """concurrent: bool"""
+        self.executor.concurrent = concurrent
+
     def interrupt(self):
-        self._executor.queue.clear()
-        if self._executor.call_lock.is_set():
+        self.executor.queue.clear()
+        if self.executor.call_lock.is_set():
             os.kill(os.getpid(), signal.SIGINT)
 
     async def exec_command(self, command, print_callback=None, secret=False):
@@ -90,13 +103,8 @@ class Pod:
         async def lock_set():
             lock.set()
 
-        async def print_cb(*args):
-            call_data['log'][time.time()] = args
-            if print_callback:
-                await print_callback(*args)
-
-        job = Job(job_type, code, inputs, print_cb, lock_set, asyncio.get_event_loop())
-        self._executor.enqueue(job)
+        job = Job(job_type, code, inputs, PrintCB(print_callback, call_data), lock_set, asyncio.get_event_loop())
+        await self.executor.enqueue(job)
         await lock.wait()
         t, out = job.returns
         call_data['output'] = out
@@ -138,8 +146,10 @@ class Executor:
         self.call_lock = None
         self.stop_lock = threading.Event()
         self.queue = deque()
+        self.concurrent = True
+        self.running = {}
 
-    def enqueue(self, job):
+    async def enqueue(self, job):
         self.queue.append(job)
         self.call_lock.set()
 
@@ -194,22 +204,39 @@ class Executor:
         while not self.stop_lock.is_set():
             while not self.queue:
                 if self.stop_lock.is_set(): return
-                self.call_lock = threading.Event()
-                self.call_lock.wait(5)
+                if self.running:
+                    self.call_lock = asyncio.Event()
+                    try:
+                        await asyncio.wait_for(self.call_lock.wait(), .1)
+                    except asyncio.TimeoutError:
+                        pass
+                else:
+                    self.call_lock = threading.Event()
+                    self.call_lock.wait(3)
 
             job = self.queue.popleft()
-            try:
-                if job.type == 'code':
-                    r = await self._execute_code(job.code, job.inputs, job.print_callback, job.loop)
-                else:
-                    r = await self._execute_command(job.code, job.inputs, job.print_callback, job.loop)
-                t = 'return'
-            except (KeyboardInterrupt, Exception) as e:
-                r = e
-                t = 'raise'
-            self.future = None
-            job.returns = t, r
-            asyncio.run_coroutine_threadsafe(job.cb(), job.loop)
+            print('>>>>>>', file=sys.stderr)
+            if self.concurrent:
+                self.running[id(job)] = asyncio.create_task(self._handle_job(job))
+                # print(t, file=sys.stderr)
+            else:
+                await self._handle_job(job)
+    
+    async def _handle_job(self, job):
+        print('handle_job', file=sys.stderr)
+        try:
+            if job.type == 'code':
+                r = await self._execute_code(job.code, job.inputs, job.print_callback, job.loop)
+            else:
+                r = await self._execute_command(job.code, job.inputs, job.print_callback, job.loop)
+            t = 'return'
+        except (KeyboardInterrupt, Exception) as e:
+            r = e
+            t = 'raise'
+        self.future = None
+        job.returns = t, r
+        self.running.pop(id(job), None)
+        asyncio.run_coroutine_threadsafe(job.cb(), job.loop)
 
 
 def decode_args():
