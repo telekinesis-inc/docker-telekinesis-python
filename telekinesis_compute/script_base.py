@@ -3,7 +3,6 @@ import asyncio
 import os
 import signal
 import json
-import re
 import time
 from contextlib import redirect_stdout, redirect_stderr
 from collections import deque
@@ -75,11 +74,23 @@ class Pod:
         if self.executor.call_lock.is_set():
             os.kill(os.getpid(), signal.SIGINT)
 
-    async def exec_command(self, command, print_callback=None, secret=False):
+    async def execute_command(self, command, print_callback=None, secret=False):
         return await self._execute('command', command, print_callback and True, print_callback, secret)
 
     async def install_package(self, package_name, print_callback=None):
-        return await self.exec_command('pip install '+ package_name, print_callback)
+        return await self.execute_command('pip install '+ package_name, print_callback)
+    
+    def write_file(self, path, data):
+        if isinstance(data, str):
+            with open(path, 'w') as f:
+                f.write(data)
+        elif isinstance(data, bytes):
+            with open(path, 'wb') as f:
+                f.write(data)
+        else:
+            raise TypeError('data must be of type "str" or "bytes", was "' + type(data).__name__ + '" instead' )
+        
+        return os.path.getsize(path)
 
     async def _execute(self, job_type, code, inputs=None, print_callback=None, secret=False):
         lock = asyncio.Event()

@@ -1,6 +1,9 @@
 const tk = require('telekinesis-js');
 const vm = require('vm');
+const fs = require('fs');
+const process = require('process');
 const { exec } = require('child_process');
+
 
 class ConsoleCapture {
   constructor(callback) {
@@ -23,24 +26,25 @@ class Pod {
     this._keepAliveCallback = undefined
   }
   async execute(code, inputs, consoleLogCallback, secret=false) {
-    const timestamp = Date.now();
+    const timestamp = Date.now() / 1000;
     const callData = {
       code: secret ? '<HIDDEN>' : code, inputs: secret ? '<HIDDEN>' : inputs,
       status: 'RUNNING', log: {}
     };
     this.calls.push([timestamp, callData])
+    const prefix ='(async () => {\n' ; 
     const suffix = '\n});'
 
     inputs = {...inputs} || {};
     inputs.require = require;
     inputs.console = new ConsoleCapture(async (...args) => {
-      callData.log[Date.now()] = Object.values(args);
+      callData.log[Date.now()/1000] = Object.values(args);
       if (consoleLogCallback) {
         await consoleLogCallback(...args);
       }
     })
     let context = vm.createContext(inputs);
-    const content = '(async () => {\n' +code+'\n'+suffix;
+    const content = prefix + code + suffix;
     try {
       callData.output = await vm.runInContext(content, context)();
       callData.status = 'SUCCEEDED';
@@ -51,11 +55,51 @@ class Pod {
       throw e;
     }
   }
+  async execute_command(command, printCallback=null, secret=false) {
+    const timestamp = Date.now() / 1000;
+    const callData = {
+      command: secret ? '<HIDDEN>' : command, 
+      status: 'RUNNING', log: {}}
+    this.calls.push([timestamp, callData])
+    return await new Promise((r, re) => {
+      exec(command, (error, stdout, stderr) => {
+        try {
+          let message = "";
+          if (error) {
+            callData.status = 'ERROR';
+            message = `error: ${error.message}`;
+            callData.output = message;
+            re(message);
+          }
+          if (stderr) {
+            message = `stderr: ${stderr}\n`;
+          }
+          message += `stdout: ${stdout}`;
+          callData.output = message;
+          callData.status = 'SUCCEEDED';
+          r(message);
+        } catch (e) {
+          re(e)
+        }
+      });
+    }).catch(e => {throw e});
+  }
+  write_file(path, data) {
+    return new Promise((r, re) => {
+      fs.writeFile(path, data, e => {
+        if (e) {re(e)}
+        else {r(data.length)}
+      });
+    });
+  }
+  async install_package(packageName, printCallback) {
+    return await this.execute_command('npm i '+ packageName, printCallback)
+  }
   async stop() {
     if (this._stopCallback) {
       await this._stopCallback().catch(() => null);
     }
-    this._resolve()
+    this._resolve();
   }
   _updateCallbacks(keepAliveCallback, serviceRunner, name) {
     this._keepAliveCallback = keepAliveCallback;
@@ -133,8 +177,28 @@ const main = (kwargs) => new Promise(resolve => {
       );
     });
     entrypoint._session.messageListener = md => pod._keepAlive(md);
+    setupUnhandledRejectionCatcher(entrypoint._session);
   } else {
-    tk.authenticate(kwargs.url, privateKey).data.put(pod, kwargs.pod_name).then(() => console.error('>> Pod is running'));
+    tk.authenticate(kwargs.url, privateKey).data.put(pod, kwargs.pod_name).then((x) => {
+      console.error('>> Pod is running')
+      setupUnhandledRejectionCatcher(x._session).catch(console.error);
+    });
   }
 });
+const setupUnhandledRejectionCatcher = async session => {
+  process
+    .on('unhandledRejection', async (reason, p) => {
+      console.error(reason, 'Unhandled Rejection at Promise', p);
+      await Promise.all(Array.from(session.targets.values()).map(([t]) => Array.from(t._requests.keys()).map(ch => 
+        t._respondRequest(ch, {error: reason, error_type: 'UnhandledRejection'}, undefined, true))))
+
+    })
+    .on('uncaughtException', async err => {
+      console.error(err, 'Uncaught Exception thrown');
+      await Promise.all(Array.from(session.targets.values()).map(([t]) => Array.from(t._requests.keys()).map(ch => 
+        t._respondRequest(ch, {error: err, error_type: 'UncaughtException'}, undefined, true))))
+      process.exit(1);
+    });
+
+}
 main(decodeArgs()).then(() => {throw new Error('Exiting');})
