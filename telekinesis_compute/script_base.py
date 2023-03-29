@@ -284,7 +284,7 @@ def decode_args():
 async def start_pod(executor, url, pod_name, private_key_str=None, key_password=None, key_filename=None, route_str=None, **_):
     private_key = None
     if private_key_str:
-        private_key = tk.cryptography.PrivateKey.from_private_serial(json.loads(private_key_str).encode(), key_password)
+        private_key = tk.cryptography.PrivateKey.from_private_serial(json.loads(private_key_str), key_password)
         if key_filename:
             private_key.save_key_file(key_filename, key_password)
     elif key_filename:

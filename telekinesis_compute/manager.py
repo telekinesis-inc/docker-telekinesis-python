@@ -155,7 +155,7 @@ class AppManager:
 
         route = await tk.Telekinesis(callback, self._session)._delegate(client_pubkey)
 
-        _key_dump = json.dumps(client_session.session_key._private_serial().decode().strip('\n'))
+        _key_dump = json.dumps(client_session.session_key.private_serial().strip('\n'))
         environment = [
             f"TELEKINESIS_URL='{self.url}'",
             f"TELEKINESIS_POD_NAME='id={client_session.session_key.public_serial()[:6]}, base={base}, cpus={cpus:.2f}, memory={int(memory)}, gpu={gpu}'",
